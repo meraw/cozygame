@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
+import { showDebugInfo } from './debugInfo.js';
 import { VillageScene } from './scenes/VillageScene.js';
 
-new Phaser.Game({
+const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
   // Twice the tablet's screen size (1180x820), so the game stays sharp on high-density screens.
@@ -15,3 +16,5 @@ new Phaser.Game({
   },
   scene: [VillageScene],
 });
+
+if (new URLSearchParams(window.location.search).has('debug')) showDebugInfo(game);
