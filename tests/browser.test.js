@@ -179,7 +179,7 @@ test('the drained things start decayed, and one restored stays restored after re
   expect(await looks(page)).toEqual(houseRestored);
 }, 60_000);
 
-test('double-tapping the door you stand at takes you into the house, and back out the same way', async () => {
+test("double-tapping the door you stand at takes you into Nora and Meredith's house, and back out the same way", async () => {
   const page = await openGame(SIDEWAYS);
   const house = village.houses[0];
   const door = houseDoors(village.houses)[0];
@@ -196,10 +196,10 @@ test('double-tapping the door you stand at takes you into the house, and back ou
   await page.waitForTimeout(800);
   expect(await activeScenes(page)).toBe('Village');
 
-  // Standing at the door, a double tap goes in
+  // Standing at the door, a double tap goes in: to the room Nora and Meredith share
   await doubleTap(page, 'Village', middleOfDoor);
   await expect.poll(() => activeScenes(page), SLOW).toBe('House');
-  expect(await interiorShown(page)).toBe('room');
+  expect(await interiorShown(page)).toBe('student');
 
   // Inside, a double tap on the room's door goes back out, in front of the same house
   await doubleTap(page, 'House', { x: roomDoor.step.x, y: roomDoor.area.bottom - 20 });

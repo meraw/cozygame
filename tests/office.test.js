@@ -12,10 +12,9 @@ describe("the mayor's office", () => {
   const { floor } = room;
   const inFrontOfDesk = { x: desk.x, y: desk.y + 60 };
 
-  test('the town hall leads into the office, and the houses into the plain room', () => {
+  test("the town hall leads into the office, Nora and Meredith's house into their room, the other houses into the plain room", () => {
     const doors = villageDoors(village);
-    expect(doors.at(-1).interior).toBe('office');
-    expect(doors.slice(0, -1).every((door) => door.interior === 'room')).toBe(true);
+    expect(doors.map((door) => door.interior)).toEqual(['student', ...Array(9).fill('room'), 'office']);
   });
 
   test('you come in standing on free floor at the door', () => {

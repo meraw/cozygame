@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
 import { drawOffice } from '../house/drawOffice.js';
 import { drawRoom } from '../house/drawRoom.js';
+import { drawStudentRoom } from '../house/drawStudentRoom.js';
 import { createMayor, mayorLines } from '../house/mayor.js';
 import { buildOfficeGrid, isOnMayor, office } from '../house/office.js';
 import { buildRoomGrid, room, roomDoor } from '../house/room.js';
+import { buildStudentRoomGrid } from '../house/studentRoom.js';
 import { Conversation } from '../world/conversation.js';
 import { addBuildLabel } from './buildLabel.js';
 import { DialogueBox } from './dialogueBox.js';
@@ -14,9 +16,11 @@ import { Walker } from './walker.js';
 const INTERIORS = {
   room: { draw: drawRoom, buildGrid: buildRoomGrid, markerColor: 0xb8a48c },
   office: { draw: drawOffice, buildGrid: buildOfficeGrid, markerColor: 0xf6e7c8 },
+  student: { draw: drawStudentRoom, buildGrid: buildStudentRoomGrid, markerColor: 0xa8845e },
 };
 
-// Inside a house (a plain room) or the town hall (the mayor's office, with the Mayor to talk to).
+// Inside a house (a plain room, or Nora and Meredith's room) or the town hall (the mayor's
+// office, with the Mayor to talk to).
 // Its door leads back out to the building the player came from.
 export class HouseScene extends Phaser.Scene {
   constructor() {
@@ -24,7 +28,7 @@ export class HouseScene extends Phaser.Scene {
   }
 
   // data.building: which building (the index of its door in the village) the player went into
-  // data.interior: what's inside it ('room' or 'office')
+  // data.interior: what's inside it ('room', 'student' or 'office')
   create(data) {
     this.interior = data.interior ?? 'room';
     const inside = INTERIORS[this.interior];

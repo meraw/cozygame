@@ -22,7 +22,7 @@ const ROAD_TOP = ROAD_Y - ROAD_HALF_WIDTH;
 
 const houses = [
   // Along the road, doors facing it. The first is the student house Meredith shares with Nora.
-  { x: 600, baseY: 1640, width: 300, wall: 200, restorable: 'student-house' },
+  { x: 600, baseY: 1640, width: 300, wall: 200, restorable: 'student-house', interior: 'student' },
   { x: 1350, baseY: 1600, width: 320, wall: 210 },
   { x: 2100, baseY: 1640, width: 280, wall: 190 },
   { x: 3900, baseY: 1620, width: 300, wall: 200 },
@@ -114,7 +114,7 @@ export function townHallBounds(hall) {
 }
 
 // Every door in the village: the houses' in order, then the town hall's.
-// interior says what's inside: a plain room, or the mayor's office.
+// interior says what's inside: a plain room, Nora and Meredith's room, or the mayor's office.
 export function villageDoors(v = village) {
   const hall = v.townHall;
   return [
@@ -132,7 +132,7 @@ export function houseDoors(houses) {
   return houses.map((house) => ({
     area: { left: house.x - 60, right: house.x + 60, top: house.baseY - 150, bottom: house.baseY + 30 },
     step: { x: house.x, y: house.baseY + 60 },
-    interior: 'room',
+    interior: house.interior ?? 'room',
   }));
 }
 
