@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { EAVE, ROOF_HEIGHT } from './layout.js';
+import { EAVE, ROOF_HEIGHT, TOWN_HALL } from './layout.js';
 
 // Colors measured from references/mood/Borgo d'autunno al tramonto.png: an autumn village
 // at sunset, lit by a low sun on the right. Everything leans warm; shadows are brown, not grey.
@@ -37,6 +37,11 @@ const COLORS = {
   windowLight: 0xf6b94f,
   frame: 0x5a3a22,
   shutter: 0x66704c,
+  townHallWall: 0xd6a86a,
+  townHallStone: 0xc9b08e,
+  flag: 0xe0782f,
+  clockFace: 0xf6efe0,
+  bell: 0xd9a441,
   ivy: [0xb8452a, 0x9c3a22, 0xd2742a, 0xc95b2c],
   trunk: 0x5a3a22,
   foliage: { orange: 0xd2742a, gold: 0xe0a23a, rust: 0xb04a24, olive: 0x9a8a35 },
@@ -73,6 +78,14 @@ export function drawVillage(scene, village) {
     const picture = makePicture(scene, `house-${i}`, width, height, width / 2, height - 24, (g) => drawHouse(g, house, i));
     place(scene, picture, house.x, house.baseY);
   });
+
+  const hall = village.townHall;
+  const hallWidth = hall.width + 2 * EAVE + 200;
+  const hallHeight = hall.wall + TOWN_HALL.towerHeight + TOWN_HALL.towerRoof + 140;
+  const hallPicture = makePicture(scene, 'town-hall', hallWidth, hallHeight, hallWidth / 2, hallHeight - 40, (g) =>
+    drawTownHall(g, hall),
+  );
+  place(scene, hallPicture, hall.x, hall.baseY);
 
   const trees = { cypress: makePicture(scene, 'tree-cypress', 140, 380, 70, 360, drawCypress) };
   for (const [kind, color] of Object.entries(COLORS.foliage)) {
@@ -306,6 +319,8 @@ function drawGround(g, v) {
     drawFlowers(g, house.x - 110, house.baseY + 40, random);
     drawFlowers(g, house.x + 110, house.baseY + 40, random);
   }
+  drawFlowers(g, v.townHall.x - 150, v.townHall.baseY + 40, random);
+  drawFlowers(g, v.townHall.x + 150, v.townHall.baseY + 40, random);
 }
 
 function drawFlowers(g, x, y, random) {
@@ -408,6 +423,143 @@ function drawIvy(g, wallLeft, random) {
     const y = -10 - height * 150 - random() * 20;
     g.fillStyle(COLORS.ivy[i % COLORS.ivy.length]);
     g.fillEllipse(x, y, 16, 12, 8);
+  }
+}
+
+// The town hall: a big plastered building with a clock tower in the middle of its front.
+function drawTownHall(g, hall) {
+  const w = hall.width;
+  const h = hall.wall;
+  const { roofHeight, towerWidth: tw, towerHeight, towerRoof } = TOWN_HALL;
+  const roofTop = -h - roofHeight;
+  const towerTop = -h - towerHeight;
+
+  // Shadow, cast away from the low sun on the right
+  g.fillStyle(COLORS.shadow, 0.32);
+  g.fillEllipse(-50, 8, w + 150, 52, 24);
+
+  // Plastered front wall, lit on the right, with stone corners and a stone base
+  g.fillStyle(COLORS.townHallWall);
+  g.fillRect(-w / 2, -h, w, h);
+  g.fillStyle(COLORS.sunlight, 0.18);
+  g.fillRect(w / 2 - w * 0.2, -h, w * 0.2, h);
+  g.fillStyle(COLORS.townHallStone);
+  for (let row = 0, y = -h; y < -34; row++, y += 38) {
+    const size = row % 2 ? 20 : 30;
+    g.fillRect(-w / 2, y, size, 34);
+    g.fillRect(w / 2 - size, y, size, 34);
+  }
+  g.fillRect(-w / 2, -34, w, 34);
+
+  // Terracotta roof; the clock tower stands in front of its middle
+  g.fillStyle(COLORS.roofs[0]);
+  g.fillPoints(
+    [
+      { x: -w / 2 - EAVE, y: -h },
+      { x: w / 2 + EAVE, y: -h },
+      { x: w / 2 - 40, y: roofTop },
+      { x: -w / 2 + 40, y: roofTop },
+    ],
+    true,
+  );
+  g.fillStyle(COLORS.shadow, 0.18);
+  for (let y = roofTop + 34; y < -h; y += 34) g.fillRect(-w / 2 - 10, y, w + 20, 6);
+  g.fillStyle(COLORS.sunlight, 0.2);
+  g.fillPoints(
+    [
+      { x: w * 0.12, y: -h },
+      { x: w / 2 + EAVE, y: -h },
+      { x: w / 2 - 40, y: roofTop },
+      { x: w * 0.1, y: roofTop },
+    ],
+    true,
+  );
+  g.fillStyle(COLORS.shadow, 0.28);
+  g.fillRect(-w / 2 - EAVE, -h - 12, w + 2 * EAVE, 12);
+
+  // Clock tower, with its own little roof and an orange flag on top
+  g.fillStyle(COLORS.townHallWall);
+  g.fillRect(-tw / 2, towerTop, tw, towerHeight);
+  g.fillStyle(COLORS.sunlight, 0.2);
+  g.fillRect(tw / 2 - 34, towerTop, 34, towerHeight);
+  g.fillStyle(COLORS.shadow, 0.12);
+  g.fillRect(-tw / 2, towerTop, 14, towerHeight);
+  g.fillStyle(COLORS.townHallStone);
+  g.fillRect(-tw / 2 - 10, towerTop - 6, tw + 20, 16);
+  g.fillStyle(COLORS.roofs[1]);
+  g.fillTriangle(-tw / 2 - 16, towerTop - 6, tw / 2 + 16, towerTop - 6, 0, towerTop - towerRoof);
+  const poleTop = towerTop - towerRoof - 80;
+  g.fillStyle(COLORS.lampPost);
+  g.fillRect(-3, poleTop, 6, 84);
+  g.fillStyle(COLORS.flag);
+  g.fillRect(3, poleTop + 2, 58, 34);
+
+  // The bell, in an arched opening at the top of the tower
+  g.fillStyle(COLORS.door);
+  g.fillRoundedRect(-28, towerTop + 26, 56, 76, { tl: 28, tr: 28, bl: 0, br: 0 });
+  g.fillStyle(COLORS.bell);
+  g.fillCircle(0, towerTop + 62, 12);
+  g.fillTriangle(-17, towerTop + 92, 17, towerTop + 92, 0, towerTop + 60);
+
+  // The clock, showing 4:42 like the reference picture
+  const clockY = towerTop + 170;
+  g.fillStyle(COLORS.townHallStone);
+  g.fillCircle(0, clockY, 50);
+  g.fillStyle(COLORS.clockFace);
+  g.fillCircle(0, clockY, 41);
+  g.lineStyle(6, COLORS.frame);
+  g.lineBetween(0, clockY, -29, clockY + 9);
+  g.lineBetween(0, clockY, 13, clockY + 16);
+  g.fillStyle(COLORS.frame);
+  g.fillCircle(0, clockY, 6);
+
+  // An orange banner under the clock, with a notched bottom
+  const bannerTop = clockY + 70;
+  g.fillStyle(COLORS.flag);
+  g.fillRect(-24, bannerTop, 48, 80);
+  g.fillStyle(COLORS.townHallWall);
+  g.fillTriangle(-24, bannerTop + 81, 24, bannerTop + 81, 0, bannerTop + 62);
+
+  // Tall arched double door in a stone frame, with a balcony above and steps below
+  g.fillStyle(COLORS.townHallStone);
+  g.fillRoundedRect(-64, -176, 128, 176, { tl: 64, tr: 64, bl: 0, br: 0 });
+  g.fillStyle(COLORS.door);
+  g.fillRoundedRect(-52, -164, 104, 164, { tl: 52, tr: 52, bl: 0, br: 0 });
+  g.lineStyle(4, COLORS.frame);
+  g.lineBetween(0, -150, 0, 0);
+  g.fillStyle(COLORS.windowLight);
+  g.fillCircle(-12, -72, 5);
+  g.fillCircle(12, -72, 5);
+  g.fillStyle(COLORS.townHallStone);
+  g.fillRect(-84, -204, 168, 16);
+  g.lineStyle(4, COLORS.lampPost);
+  for (let x = -76; x <= 76; x += 19) g.lineBetween(x, -204, x, -236);
+  g.lineBetween(-80, -236, 80, -236);
+  g.fillStyle(COLORS.townHallStone);
+  g.fillRect(-92, -6, 184, 14);
+  g.fillStyle(COLORS.stoneDark);
+  g.fillRect(-112, 8, 224, 14);
+
+  // Tall arched windows with green shutters and flower boxes, two on each side of the door
+  for (const x of [-226, -130, 130, 226]) {
+    const top = -h + 60;
+    const height = 130;
+    g.fillStyle(COLORS.windowLight, 0.25);
+    g.fillEllipse(x, top + height / 2, 110, 170, 20);
+    g.fillStyle(COLORS.shutter);
+    g.fillRect(x - 44, top, 16, height);
+    g.fillRect(x + 28, top, 16, height);
+    g.fillStyle(COLORS.windowLight);
+    g.fillRoundedRect(x - 26, top, 52, height, { tl: 26, tr: 26, bl: 0, br: 0 });
+    g.lineStyle(5, COLORS.frame);
+    g.lineBetween(x, top + 10, x, top + height);
+    g.lineBetween(x - 26, top + 60, x + 26, top + 60);
+    g.fillStyle(COLORS.wood);
+    g.fillRect(x - 32, top + height, 64, 14);
+    for (let i = 0; i < 5; i++) {
+      g.fillStyle(COLORS.flowers[i % COLORS.flowers.length]);
+      g.fillEllipse(x - 24 + i * 12, top + height - 2, 12, 10, 8);
+    }
   }
 }
 

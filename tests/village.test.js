@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { buildWalkGrid, village } from '../src/village/layout.js';
+import { buildWalkGrid, village, villageDoors } from '../src/village/layout.js';
 import { isWalkable, toCell } from '../src/world/grid.js';
 import { planPath } from '../src/world/pathfinding.js';
 
@@ -45,10 +45,9 @@ describe('the village', () => {
     expect(tapsToCross(village.width - 300, 300)).toBeLessThan(20);
   });
 
-  test('every house door can be walked to', () => {
-    for (const house of village.houses) {
-      const doorstep = { x: house.x, y: house.baseY + 60 };
-      expect(planPath(grid, village.start, doorstep)?.at(-1)).toEqual(doorstep);
+  test('every door, including the town hall, can be walked to', () => {
+    for (const { step } of villageDoors(village)) {
+      expect(planPath(grid, village.start, step)?.at(-1)).toEqual(step);
     }
   });
 });

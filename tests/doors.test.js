@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { buildRoomGrid, room, roomDoor } from '../src/house/room.js';
-import { buildWalkGrid, houseDoors, village } from '../src/village/layout.js';
+import { buildWalkGrid, village, villageDoors } from '../src/village/layout.js';
 import { createDoubleTapDetector } from '../src/world/doubleTap.js';
 import { doorAt, isNearDoor } from '../src/world/doors.js';
 import { isWalkable, toCell } from '../src/world/grid.js';
@@ -28,14 +28,17 @@ describe('double taps', () => {
   });
 });
 
-describe('house doors', () => {
+describe('village doors', () => {
   const grid = buildWalkGrid(village);
-  const doors = houseDoors(village.houses);
+  const doors = villageDoors(village);
+  const middleOf = ({ area }) => ({ x: (area.left + area.right) / 2, y: (area.top + area.bottom) / 2 });
 
-  test('a tap on the middle of a door finds that house', () => {
-    village.houses.forEach((house, i) => {
-      expect(doorAt(doors, { x: house.x, y: house.baseY - 56 })).toBe(i);
-    });
+  test('every house and the town hall has a door', () => {
+    expect(doors).toHaveLength(village.houses.length + 1);
+  });
+
+  test('a tap on the middle of a door finds that door', () => {
+    doors.forEach((door, i) => expect(doorAt(doors, middleOf(door))).toBe(i));
   });
 
   test('a tap on a roof or on the grass is not a door', () => {
@@ -45,10 +48,10 @@ describe('house doors', () => {
   });
 
   test('one tap on a door walks the player close enough to go in', () => {
-    village.houses.forEach((house, i) => {
-      const end = planPath(grid, village.start, { x: house.x, y: house.baseY - 56 }).at(-1);
-      expect(isNearDoor(end, doors[i])).toBe(true);
-    });
+    for (const door of doors) {
+      const end = planPath(grid, village.start, middleOf(door)).at(-1);
+      expect(isNearDoor(end, door)).toBe(true);
+    }
   });
 
   test('from the start of the village every door is out of reach', () => {
@@ -61,6 +64,24 @@ describe('house doors', () => {
       expect(isWalkable(grid, cell.col, cell.row)).toBe(true);
       expect(isNearDoor(door.step, door)).toBe(true);
     }
+  });
+});
+
+describe('the town hall', () => {
+  const { townHall, square } = village;
+
+  test('is bigger than every house', () => {
+    for (const house of village.houses) {
+      expect(townHall.width).toBeGreaterThan(house.width * 1.5);
+      expect(townHall.wall).toBeGreaterThan(house.wall);
+    }
+  });
+
+  test('stands on the north side of the square, its door facing the fountain', () => {
+    const squareTop = square.y - square.radius;
+    expect(townHall.x).toBe(square.x);
+    expect(townHall.baseY).toBeLessThan(squareTop);
+    expect(squareTop - villageDoors(village).at(-1).step.y).toBeLessThan(60);
   });
 });
 

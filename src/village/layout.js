@@ -10,6 +10,8 @@ const PLAYER_RADIUS = 30;
 // Houses are drawn front-on: a wall with the door at the middle of its base, and a roof above.
 export const EAVE = 30;
 export const ROOF_HEIGHT = 150;
+// The town hall is drawn like a big house, with a clock tower rising from the middle of its front.
+export const TOWN_HALL = { roofHeight: 170, towerWidth: 150, towerHeight: 330, towerRoof: 70 };
 
 const ROAD_Y = 1900;
 const ROAD_HALF_WIDTH = 80;
@@ -31,6 +33,9 @@ const houses = [
   { x: 3500, baseY: 2800, width: 320, wall: 200 },
 ];
 
+// On the north side of the square, its door facing the fountain
+const townHall = { x: 3000, baseY: 1440, width: 600, wall: 280 };
+
 export const village = {
   width: 6000,
   height: 3360,
@@ -42,11 +47,13 @@ export const village = {
   fountain: { x: 3000, y: ROAD_Y, radius: 110 },
   pond: { x: 4800, y: 2700, radiusX: 520, radiusY: 230 },
   houses,
+  townHall,
   // Dirt paths, just for looks
   lanes: [
     ...houses
       .filter((house) => house.baseY < ROAD_TOP)
       .map((house) => ({ x: house.x - 40, y: house.baseY - 10, width: 80, height: ROAD_TOP - house.baseY + 10 })),
+    { x: townHall.x - 50, y: townHall.baseY - 10, width: 100, height: 100 }, // from the town hall to the square
     { x: 1110, y: 1960, width: 80, height: 250 }, // to the field gate
     { x: 2960, y: 2260, width: 80, height: 560 }, // from the square down to the lower houses
     { x: 2560, y: 2800, width: 1080, height: 80 }, // past the lower houses' doors
@@ -65,7 +72,7 @@ export const village = {
   ],
   trees: [...edgeTrees(), ...villageTrees()],
   benches: [
-    { x: 3000, y: 1600 },
+    { x: 2720, y: 2130 },
     { x: 4800, y: 2390 },
   ],
   lamps: [
@@ -76,7 +83,7 @@ export const village = {
   ],
   rocks: [
     { x: 2350, y: 1050, size: 40 },
-    { x: 3350, y: 1250, size: 34 },
+    { x: 3460, y: 1330, size: 34 },
     { x: 5600, y: 2450, size: 44 },
     { x: 2300, y: 3080, size: 38 },
     { x: 700, y: 3000, size: 36 },
@@ -89,6 +96,25 @@ export function houseBounds(house) {
   const width = house.width + 2 * EAVE;
   const height = house.wall + ROOF_HEIGHT;
   return { left: house.x - width / 2, top: house.baseY - height, width, height };
+}
+
+// The area the town hall covers on screen, from the bottom of its wall to the top of its tower.
+export function townHallBounds(hall) {
+  const width = hall.width + 2 * EAVE;
+  const height = hall.wall + TOWN_HALL.towerHeight + TOWN_HALL.towerRoof;
+  return { left: hall.x - width / 2, top: hall.baseY - height, width, height };
+}
+
+// Every door in the village: the houses' in order, then the town hall's.
+export function villageDoors(v = village) {
+  const hall = v.townHall;
+  return [
+    ...houseDoors(v.houses),
+    {
+      area: { left: hall.x - 80, right: hall.x + 80, top: hall.baseY - 190, bottom: hall.baseY + 30 },
+      step: { x: hall.x, y: hall.baseY + 60 },
+    },
+  ];
 }
 
 // Each house's front door: the area you can tap, and the step in front of it where you stand.
@@ -112,6 +138,8 @@ export function buildWalkGrid(v = village) {
     const { left, top, width, height } = houseBounds(house);
     solidRect(left, top, width, height);
   }
+  const hall = townHallBounds(v.townHall);
+  solidRect(hall.left, hall.top, hall.width, hall.height);
   for (const fence of v.fences) {
     if (fence.direction === 'across') solidRect(fence.x, fence.y - 10, fence.length, 20);
     else solidRect(fence.x - 10, fence.y, 20, fence.length);
@@ -143,8 +171,8 @@ function villageTrees() {
     { x: 1750, y: 1300, size: 1.2 },
     { x: 2450, y: 1450, size: 1 },
     { x: 3560, y: 1450, size: 1 },
-    { x: 2700, y: 1150, size: 1.25 },
-    { x: 3100, y: 1000, size: 1.1 },
+    { x: 2560, y: 1180, size: 1.25 },
+    { x: 3480, y: 1080, size: 1.1 },
     { x: 5750, y: 1350, size: 1.1 },
     { x: 2450, y: 2380, size: 1 },
     { x: 3560, y: 2380, size: 1 },
