@@ -2,8 +2,12 @@ import Phaser from 'phaser';
 import { save } from '../save.js';
 import { addSunsetLight, drawVillage } from '../village/drawVillage.js';
 import { buildWalkGrid, village, villageDoors } from '../village/layout.js';
+import { Villager } from '../village/villager.js';
+import { characters } from '../world/characters.js';
+import { isOnCharacter } from '../world/harvest.js';
 import { addBuildLabel } from './buildLabel.js';
 import { fadeIn, listenForTaps } from './doorTaps.js';
+import { Phone } from './phone.js';
 import { Walker } from './walker.js';
 
 const MARKER_COLOR = 0xfff0c8;
@@ -25,7 +29,8 @@ export class VillageScene extends Phaser.Scene {
     addSunsetLight(this);
 
     const start = Number.isInteger(data?.fromBuilding) ? doors[data.fromBuilding].step : village.start;
-    this.walker = new Walker(this, grid, start, MARKER_COLOR);
+    this.walker = new Walker(this, grid, start, { markerColor: MARKER_COLOR });
+    this.villager = new Villager(this, grid, village.villagerStart);
 
     const camera = this.cameras.main;
     camera.setBounds(0, 0, village.width, village.height);
@@ -33,8 +38,21 @@ export class VillageScene extends Phaser.Scene {
     fadeIn(this);
 
     addBuildLabel(this);
-    listenForTaps(this, this.walker, doors, (building) =>
-      this.scene.start('House', { building, interior: doors[building].interior }),
+    const villagerFeet = () => this.villager.walker.player;
+    this.phone = new Phone(this, this.walker, [
+      {
+        isVampire: characters.villager.isVampire,
+        feet: villagerFeet,
+        isTappedAt: (point) => isOnCharacter(villagerFeet(), point),
+        flinch() {},
+      },
+    ]);
+    listenForTaps(
+      this,
+      this.walker,
+      doors,
+      (building) => this.scene.start('House', { building, interior: doors[building].interior }),
+      (tapped, pointer) => this.phone.tap(tapped, pointer),
     );
   }
 
@@ -48,5 +66,6 @@ export class VillageScene extends Phaser.Scene {
 
   update(time, delta) {
     this.walker.update(delta);
+    this.villager.update(delta, this.walker.player);
   }
 }

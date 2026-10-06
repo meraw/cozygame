@@ -43,6 +43,8 @@ export const village = {
   width: 6000,
   height: 3360,
   start: { x: 300, y: ROAD_Y },
+  // Where the villager out for a walk starts from
+  villagerStart: { x: 1500, y: ROAD_Y },
   // Misty hills fill the top edge; nobody walks there.
   hillsBottom: 560,
   road: { y: ROAD_Y, halfWidth: ROAD_HALF_WIDTH },

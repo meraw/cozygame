@@ -59,6 +59,27 @@ describe('the save', () => {
     }
   });
 
+  test('a new game starts with no life energy', () => {
+    expect(new SaveGame(fakeStorage()).lifeEnergy).toBe(0);
+  });
+
+  test('harvested life energy is remembered the next time the game opens, along with what was restored', () => {
+    const storage = fakeStorage();
+    const save = new SaveGame(storage);
+    save.addLifeEnergy(10);
+    save.setRestored('student-house', true);
+    save.addLifeEnergy(10);
+    const reopened = new SaveGame(storage);
+    expect(reopened.lifeEnergy).toBe(20);
+    expect(reopened.isRestored('student-house')).toBe(true);
+  });
+
+  test('a damaged life energy count starts again from nothing', () => {
+    for (const damaged of ['{"lifeEnergy":"lots"}', '{"lifeEnergy":-5}', '{"lifeEnergy":null}', '{"lifeEnergy":1e999}']) {
+      expect(new SaveGame(fakeStorage(damaged)).lifeEnergy).toBe(0);
+    }
+  });
+
   test('the game hears about each change, until it stops listening', () => {
     const save = new SaveGame(fakeStorage());
     let heard = 0;

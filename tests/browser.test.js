@@ -7,9 +7,11 @@ import { afterAll, beforeAll, expect, test } from 'vitest';
 import mayorFile from '../dialogue/mayor.txt?raw';
 import { office } from '../src/house/office.js';
 import { roomDoor } from '../src/house/room.js';
+import { studentRoom } from '../src/house/studentRoom.js';
 import { houseDoors, restorableNames, village, villageDoors } from '../src/village/layout.js';
 import { parseDialogue } from '../src/world/conversation.js';
 import { isNearDoor } from '../src/world/doors.js';
+import { HARVEST_REACH, LIFE_ENERGY_PER_HARVEST } from '../src/world/harvest.js';
 
 // These tests play the real game in Chrome, pretending to be an Android tablet with a touch screen.
 // An Android tablet's screen, held upright and sideways (sideways loses some height to the browser bar).
@@ -130,6 +132,31 @@ function looks(page) {
   });
 }
 
+// The number the life energy counter on screen shows, in a scene.
+function counterShows(page, sceneKey) {
+  return page.evaluate((key) => Number(window.cozy.game.scene.getScene(key).phone.counter.text), sceneKey);
+}
+
+// Taps the phone button, which stays put in its corner of the screen.
+async function tapPhoneButton(page, sceneKey) {
+  const { x, y } = await page.evaluate((key) => {
+    const { game } = window.cozy;
+    const { button } = game.scene.getScene(key).phone;
+    const canvas = game.canvas.getBoundingClientRect();
+    const scale = canvas.width / game.scale.width;
+    return { x: canvas.left + button.x * scale, y: canvas.top + button.y * scale };
+  }, sceneKey);
+  await page.touchscreen.tap(x, y);
+}
+
+// Where the villager walking around the village is right now (the point under their feet).
+function villagerInVillage(page) {
+  return page.evaluate(() => {
+    const { player } = window.cozy.game.scene.getScene('Village').villager.walker;
+    return { x: player.x, y: player.y };
+  });
+}
+
 // Without a graphics card the game runs in slow motion, so allow plenty of time for walks and fades.
 const SLOW = { timeout: 30_000 };
 
@@ -205,6 +232,57 @@ test("double-tapping the door you stand at takes you into Nora and Meredith's ho
   await doubleTap(page, 'House', { x: roomDoor.step.x, y: roomDoor.area.bottom - 20 });
   await expect.poll(() => activeScenes(page), SLOW).toBe('Village');
   expect(isNearDoor(await playerInVillage(page), door)).toBe(true);
+}, 120_000);
+
+test('harvesting Nora with the phone raises the life energy counter, which is still there after reloading', async () => {
+  const page = await openGame(SIDEWAYS);
+  const middleOfDoor = { x: village.houses[0].x, y: village.houses[0].baseY - 56 };
+  await doubleTap(page, 'Village', middleOfDoor);
+  await waitUntilStill(page, 'Village');
+  await doubleTap(page, 'Village', middleOfDoor);
+  await expect.poll(() => activeScenes(page), SLOW).toBe('House');
+  expect(await counterShows(page, 'House')).toBe(0);
+
+  // Phone out, then tap Nora: from the door she's too far, so Meredith walks up to her first
+  const { nora } = studentRoom;
+  const onNora = { x: nora.x, y: nora.y - 100 };
+  await tapPhoneButton(page, 'House');
+  await tap(page, 'House', onNora);
+  await waitUntilStill(page, 'House');
+  expect(await counterShows(page, 'House')).toBe(0);
+
+  // Close by, tapping her harvests her life energy
+  await tap(page, 'House', onNora);
+  await expect.poll(() => counterShows(page, 'House'), SLOW).toBe(LIFE_ENERGY_PER_HARVEST);
+
+  // Reopening the game: still there
+  await page.reload();
+  await waitForVillage(page);
+  expect(await counterShows(page, 'Village')).toBe(LIFE_ENERGY_PER_HARVEST);
+}, 120_000);
+
+test("tapping someone who isn't a vampire with the phone out does nothing", async () => {
+  const page = await openGame(SIDEWAYS);
+
+  // Walk up to the villager (who stops walking about while Meredith is close)
+  let villager;
+  let meredith;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    villager = await villagerInVillage(page);
+    await tap(page, 'Village', { x: villager.x - 120, y: villager.y + 30 });
+    await waitUntilStill(page, 'Village');
+    villager = await villagerInVillage(page);
+    meredith = await playerInVillage(page);
+    if (Math.hypot(villager.x - meredith.x, villager.y - meredith.y) < HARVEST_REACH - 40) break;
+  }
+  expect(Math.hypot(villager.x - meredith.x, villager.y - meredith.y)).toBeLessThan(HARVEST_REACH);
+
+  // Phone out, tap the villager: no life energy, and Meredith doesn't go anywhere either
+  await tapPhoneButton(page, 'Village');
+  await tap(page, 'Village', { x: villager.x, y: villager.y - 100 });
+  await page.waitForTimeout(1500);
+  expect(await counterShows(page, 'Village')).toBe(0);
+  expect(await playerInVillage(page)).toEqual(meredith);
 }, 120_000);
 
 test("the town hall's door leads into the mayor's office, where you can talk to the Mayor", async () => {

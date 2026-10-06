@@ -5,13 +5,18 @@ import { planPath } from '../world/pathfinding.js';
 // World units per second (the screen is 2360 units wide).
 const WALK_SPEED = 650;
 
-// The player character in a scene: walkTo() plans a walk around obstacles, update() moves her along it.
+// Someone walking about a scene, the player character unless told otherwise: walkTo() plans a
+// walk around obstacles, update() moves them along it. `player` is what moves (its position is
+// the point under their feet).
+// options.markerColor: the ring shown where they're heading (none without it)
+// options.createFigure: draws them (Meredith by default); options.speed: world units per second
 export class Walker {
-  constructor(scene, grid, start, markerColor) {
+  constructor(scene, grid, start, { markerColor, createFigure = createPlayer, speed = WALK_SPEED } = {}) {
     this.scene = scene;
     this.grid = grid;
     this.markerColor = markerColor;
-    const { container, figure } = createPlayer(scene, start.x, start.y);
+    this.speed = speed;
+    const { container, figure } = createFigure(scene, start.x, start.y);
     this.player = container;
     this.figure = figure;
     this.waypoints = [];
@@ -23,7 +28,7 @@ export class Walker {
     if (!path?.length) return;
     this.waypoints = path;
     const end = path[path.length - 1];
-    this.showMarker(end.x, end.y);
+    if (this.markerColor !== undefined) this.showMarker(end.x, end.y);
   }
 
   stop() {
@@ -45,7 +50,7 @@ export class Walker {
 
   update(delta) {
     if (this.waypoints.length > 0) {
-      const step = stepAlong(this.player, this.waypoints, (WALK_SPEED * delta) / 1000);
+      const step = stepAlong(this.player, this.waypoints, (this.speed * delta) / 1000);
       if (Math.abs(step.x - this.player.x) > 0.5) this.figure.setFlipX(step.x < this.player.x);
       this.player.setPosition(step.x, step.y).setDepth(step.y);
       this.waypoints = step.waypoints;

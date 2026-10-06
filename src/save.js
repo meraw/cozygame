@@ -1,6 +1,6 @@
 // The player's progress, kept in the browser's storage (localStorage) so it's still there the
-// next time the game opens on the same tablet. For now it remembers which drained things
-// have been restored; everything else starts as in a new game.
+// next time the game opens on the same tablet: which drained things have been restored, and
+// how much life energy Meredith has harvested. Everything else starts as in a new game.
 
 export const SAVE_KEY = 'cozygame-save';
 
@@ -9,7 +9,9 @@ export class SaveGame {
   // refuses), the game still plays; it just forgets everything when the page is reloaded.
   constructor(storage) {
     this.storage = storage;
-    this.restored = new Set(readSave(storage).restored);
+    const saved = readSave(storage);
+    this.restored = new Set(saved.restored);
+    this.lifeEnergy = saved.lifeEnergy;
     this.listeners = new Set();
   }
 
@@ -20,12 +22,12 @@ export class SaveGame {
   setRestored(name, restored) {
     if (restored) this.restored.add(name);
     else this.restored.delete(name);
-    try {
-      this.storage?.setItem(SAVE_KEY, JSON.stringify({ restored: [...this.restored] }));
-    } catch {
-      // The browser won't keep it (full, or private browsing): keep playing without saving.
-    }
-    for (const listener of this.listeners) listener();
+    this.changed();
+  }
+
+  addLifeEnergy(amount) {
+    this.lifeEnergy += amount;
+    this.changed();
   }
 
   // Calls listener after every change. Returns a function that stops it.
@@ -33,19 +35,29 @@ export class SaveGame {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
+
+  changed() {
+    try {
+      this.storage?.setItem(SAVE_KEY, JSON.stringify({ restored: [...this.restored], lifeEnergy: this.lifeEnergy }));
+    } catch {
+      // The browser won't keep it (full, or private browsing): keep playing without saving.
+    }
+    for (const listener of this.listeners) listener();
+  }
 }
 
-// What's in storage, or a new game if there's nothing there or it can't be read.
+// What's in storage. Anything missing or unreadable starts as in a new game rather than break.
 function readSave(storage) {
+  let saved = null;
   try {
-    const saved = JSON.parse(storage?.getItem(SAVE_KEY) ?? 'null');
-    if (Array.isArray(saved?.restored)) {
-      return { restored: saved.restored.filter((name) => typeof name === 'string') };
-    }
+    saved = JSON.parse(storage?.getItem(SAVE_KEY) ?? 'null');
   } catch {
-    // Unreadable: start a new game rather than break.
+    // Unreadable: a new game
   }
-  return { restored: [] };
+  const restored = Array.isArray(saved?.restored) ? saved.restored.filter((name) => typeof name === 'string') : [];
+  const energy = saved?.lifeEnergy;
+  const lifeEnergy = Number.isFinite(energy) && energy >= 0 ? Math.floor(energy) : 0;
+  return { restored, lifeEnergy };
 }
 
 function browserStorage() {

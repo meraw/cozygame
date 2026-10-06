@@ -1,7 +1,7 @@
 // Nora and Meredith's room in their student house: the same room as the other houses, furnished.
 // Along the back wall, left to right: a long desk for two, the window, and a bunk bed.
 
-import { blockRect } from '../world/grid.js';
+import { blockEllipse, blockRect } from '../world/grid.js';
 import { buildRoomGrid, room } from './room.js';
 
 // How far the player's body reaches around the point under their feet.
@@ -20,6 +20,8 @@ export const studentRoom = {
   bunkBed: { x: 1640, y: 700, width: 540 },
   // A long patchwork rug from the window towards the door
   rug: { x: 1180, y: 560, width: 230, height: 620 },
+  // Where Nora stands (under her feet), in front of the bunk bed
+  nora: { x: 1560, y: 950 },
 };
 
 // The room's floor, minus the furniture (grown by the player's radius, like everything solid).
@@ -27,10 +29,12 @@ export function buildStudentRoomGrid() {
   const grid = buildRoomGrid();
   const pad = PLAYER_RADIUS;
   const solidRect = (x, y, width, height) => blockRect(grid, x - pad, y - pad, width + 2 * pad, height + 2 * pad);
-  const { desk, chairs, bunkBed } = studentRoom;
+  const { desk, chairs, bunkBed, nora } = studentRoom;
   const wallFoot = room.floor.y;
   solidRect(desk.x - desk.width / 2, wallFoot, desk.width, desk.y - wallFoot);
   solidRect(bunkBed.x - bunkBed.width / 2, wallFoot, bunkBed.width, bunkBed.y - wallFoot);
   for (const chair of chairs) solidRect(chair.x - 45, chair.y - 50, 90, 50);
+  // Meredith walks round Nora, not through her
+  blockEllipse(grid, nora.x, nora.y, 34 + pad, 18 + pad);
   return grid;
 }

@@ -3,10 +3,11 @@
 // Shown only when the link ends with ?debug
 export function showDebugSwitches(save, names) {
   const panel = document.createElement('div');
+  // Bottom left, clear of the life energy counter and the phone button
   Object.assign(panel.style, {
     position: 'fixed',
-    right: '8px',
-    top: '8px',
+    left: '8px',
+    bottom: '8px',
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
