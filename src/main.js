@@ -17,4 +17,12 @@ const game = new Phaser.Game({
   scene: [VillageScene],
 });
 
+// When the tablet is turned, Phaser can measure the screen too early and keep the old size,
+// so fit the game again whenever its area on the page changes size.
+new ResizeObserver(() => {
+  if (!game.isBooted) return;
+  game.scale.getParentBounds();
+  game.scale.refresh();
+}).observe(document.getElementById('game'));
+
 if (new URLSearchParams(window.location.search).has('debug')) showDebugInfo(game);
