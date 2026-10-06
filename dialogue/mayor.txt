@@ -3,6 +3,6 @@
 # Lines starting with # (like these notes) don't show up in the game, and empty lines are skipped.
 # A long line is fine: it wraps onto more rows inside the box. About 4 rows fit.
 
-Mayor Jones: TODO(owner): Meredith, isn't it?
-Mayor Jones: TODO(owner): Your mom told me about you. You're the right person to help this town.
-Mayor Jones: TODO(owner): Here is my number. 
+Mayor Jones: Meredith, isn't it?
+Mayor Jones: Your mom told me about you. You're the right person to help this town.
+Mayor Jones: Here is my number. 
