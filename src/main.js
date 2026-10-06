@@ -8,7 +8,7 @@ const game = new Phaser.Game({
   // Twice the tablet's screen size (1180x820), so the game stays sharp on high-density screens.
   width: 2360,
   height: 1640,
-  backgroundColor: '#4f5a2c',
+  backgroundColor: '#3a2416',
   scale: {
     // Keep this shape and scale it to fit the screen; any leftover space shows the page background.
     mode: Phaser.Scale.FIT,

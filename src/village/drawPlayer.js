@@ -26,7 +26,8 @@ export function createPlayer(scene, x, y) {
     g.generateTexture('player', WIDTH, HEIGHT);
     g.destroy();
   }
-  const shadow = scene.add.ellipse(0, 0, 80, 26, 0x000000, 0.2);
+  // Warm shadow, falling a little to the left, away from the low sun
+  const shadow = scene.add.ellipse(-10, 0, 84, 26, 0x4a2410, 0.25);
   const figure = scene.add.image(0, 0, 'player').setOrigin(0.5, FEET_Y / HEIGHT);
   const container = scene.add.container(x, y, [shadow, figure]).setDepth(y);
   return { container, figure };

@@ -35,7 +35,7 @@ export function showDebugInfo(game) {
       `screen ${window.screen.width}x${window.screen.height} ${window.screen.orientation?.type ?? ''}`,
       `game box ${size(document.getElementById('game').getBoundingClientRect())}`,
       canvas ? `canvas ${size(canvas)} at ${Math.round(canvas.left)},${Math.round(canvas.top)}` : 'canvas (none)',
-      `renderer ${game.renderer?.type === 2 ? 'WebGL' : 'Canvas'}  build ${__BUILD_ID__}`,
+      `renderer ${game.renderer?.type === 2 ? 'WebGL' : 'Canvas'}  ${Math.round(game.loop.actualFps)} fps  build ${__BUILD_ID__}`,
       navigator.userAgent,
       ...errors.slice(-3).map((message) => `error: ${message}`),
     ].join('\n');

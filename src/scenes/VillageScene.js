@@ -1,13 +1,13 @@
 import Phaser from 'phaser';
 import { createPlayer } from '../village/drawPlayer.js';
-import { drawVillage } from '../village/drawVillage.js';
+import { addSunsetLight, drawVillage } from '../village/drawVillage.js';
 import { buildWalkGrid, village } from '../village/layout.js';
 import { stepAlong } from '../world/movement.js';
 import { planPath } from '../world/pathfinding.js';
 
 // World units per second (the screen is 2360 units wide).
 const WALK_SPEED = 650;
-const MARKER_COLOR = 0xd9772b;
+const MARKER_COLOR = 0xfff0c8;
 const FONT = 'ui-rounded, "Segoe UI", system-ui, sans-serif';
 
 export class VillageScene extends Phaser.Scene {
@@ -18,6 +18,7 @@ export class VillageScene extends Phaser.Scene {
   create() {
     this.grid = buildWalkGrid(village);
     drawVillage(this, village);
+    addSunsetLight(this);
 
     const { container, figure } = createPlayer(this, village.start.x, village.start.y);
     this.player = container;

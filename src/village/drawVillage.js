@@ -1,46 +1,63 @@
 import Phaser from 'phaser';
 import { EAVE, ROOF_HEIGHT } from './layout.js';
 
-// Placeholder colors, loosely following the [PROPOSED] village palette in design.md.
+// Colors measured from references/mood/Borgo d'autunno al tramonto.png: an autumn village
+// at sunset, lit by a low sun on the right. Everything leans warm; shadows are brown, not grey.
 const COLORS = {
-  skyTop: 0xf6e7c8,
-  skyBottom: 0xf0c08f,
-  hills: [0xbcc5cc, 0x9eaab4, 0x83919c],
-  mist: 0xf8efe0,
-  hedge: 0x6c7838,
-  grass: 0x8f9b55,
-  grassDark: 0x7f8b49,
-  grassLight: 0xa0ab66,
-  dirt: 0xd8b679,
-  dirtEdge: 0xc4a062,
-  stone: 0xcbc1b3,
-  stoneEdge: 0xb3a99b,
-  soil: 0x8a5a3b,
-  furrow: 0x74492f,
-  sprout: 0x6f8a3a,
-  water: 0x7ea7b8,
-  waterLight: 0xa8c8d2,
-  waterEdge: 0x6c8f9d,
-  flowers: [0xe8a33d, 0xd9772b, 0xf3e6d0, 0xb9a3d6],
-  walls: [0xcfc4b4, 0xe6d8bf, 0xd9b77a, 0xc9b8a3],
-  roofs: [0xc0623b, 0xb4552f, 0xc96f3a, 0xa94f32],
-  chimney: 0x8f8579,
-  door: 0x8c4a2f,
-  window: 0xf2b84b,
-  frame: 0x6b4a32,
-  trunk: 0x6b4a32,
-  canopies: [0x6f7d3a, 0x87903f, 0xb8692e],
-  wood: 0x9a7650,
-  woodDark: 0x6e5236,
-  lampPost: 0x4a3f36,
-  lampLight: 0xf6d58a,
-  rock: 0xa59d92,
-  rockLight: 0xbdb6ac,
-  shadow: 0x000000,
+  skyTop: 0xd8956a,
+  skyHorizon: 0xfcd593,
+  sun: 0xfff3cf,
+  sunGlow: 0xffd98a,
+  hills: [0xc4a59c, 0xa98d88, 0x9a7a5c],
+  hillTown: 0x8c726c,
+  mist: 0xf6d9b8,
+  orchard: [0xb8692e, 0xc98a3a],
+  hedge: 0x6b5a2a,
+  grass: 0xa48c44,
+  grassDark: 0x8a7536,
+  grassLight: 0xc0a656,
+  leaves: [0xd2742a, 0xb04a24, 0xe0a23a],
+  dirt: 0xd9a86c,
+  dirtEdge: 0xb8875a,
+  cobble: 0xbf8f63,
+  cobbleLight: 0xe8c08c,
+  square: 0xd6a874,
+  squareEdge: 0xa9805e,
+  soil: 0x7a4a2c,
+  furrow: 0x5f3a22,
+  sprout: 0x9a8a35,
+  water: 0x6f9a9c,
+  waterEdge: 0x8a7258,
+  flowers: [0xe0862f, 0xb8452a, 0xf2d27a, 0xf3e2c4],
+  walls: [0xc4a684, 0xb89a78, 0xccb08a, 0xae9172],
+  roofs: [0xb4532c, 0xa5482a, 0xbf5f33, 0x9c4426],
+  chimney: 0x8f7660,
+  smoke: 0xf3e6d6,
+  door: 0x5a3018,
+  windowLight: 0xf6b94f,
+  frame: 0x5a3a22,
+  shutter: 0x66704c,
+  ivy: [0xb8452a, 0x9c3a22, 0xd2742a, 0xc95b2c],
+  trunk: 0x5a3a22,
+  foliage: { orange: 0xd2742a, gold: 0xe0a23a, rust: 0xb04a24, olive: 0x9a8a35 },
+  cypress: 0x4a5128,
+  wood: 0x8a5e3a,
+  woodDark: 0x5e3d24,
+  lampPost: 0x3e2c20,
+  lampGlow: 0xffcf7a,
+  stone: 0xc9ad8a,
+  stoneDark: 0xa58a6e,
+  rock: 0xa58f78,
+  rockLight: 0xc9b190,
+  sunlight: 0xffd27a,
+  shadow: 0x4a2410,
 };
 
 const GROUND_DEPTH = -100000;
+const LIGHT_DEPTH = 5e8;
 const FENCE_STEP = 80;
+// Which kind of tree stands at each spot, in turn: mostly autumn colours, now and then a cypress.
+const TREE_KINDS = ['orange', 'gold', 'rust', 'orange', 'cypress', 'gold', 'orange', 'olive', 'rust'];
 
 // Draws the whole village. The flat ground is one drawing under everything; anything that
 // stands up (houses, trees...) is its own picture, layered by how far down the screen its
@@ -51,22 +68,25 @@ export function drawVillage(scene, village) {
   drawGround(ground, village);
 
   village.houses.forEach((house, i) => {
-    const width = house.width + 2 * EAVE + 40;
-    const height = house.wall + ROOF_HEIGHT + 64;
+    const width = house.width + 2 * EAVE + 100;
+    const height = house.wall + ROOF_HEIGHT + 224;
     const picture = makePicture(scene, `house-${i}`, width, height, width / 2, height - 24, (g) => drawHouse(g, house, i));
     place(scene, picture, house.x, house.baseY);
   });
 
-  const trees = COLORS.canopies.map((canopy, i) => makePicture(scene, `tree-${i}`, 250, 280, 125, 260, (g) => drawTree(g, canopy)));
-  village.trees.forEach((tree, i) => place(scene, trees[i % trees.length], tree.x, tree.y, tree.size));
+  const trees = { cypress: makePicture(scene, 'tree-cypress', 140, 380, 70, 360, drawCypress) };
+  for (const [kind, color] of Object.entries(COLORS.foliage)) {
+    trees[kind] = makePicture(scene, `tree-${kind}`, 270, 300, 135, 280, (g) => drawTree(g, color));
+  }
+  village.trees.forEach((tree, i) => place(scene, trees[TREE_KINDS[i % TREE_KINDS.length]], tree.x, tree.y, tree.size));
 
-  const lamp = makePicture(scene, 'lamp', 80, 230, 40, 220, drawLamp);
+  const lamp = makePicture(scene, 'lamp', 150, 290, 75, 270, drawLamp);
   village.lamps.forEach((spot) => place(scene, lamp, spot.x, spot.y));
 
-  const bench = makePicture(scene, 'bench', 200, 110, 100, 100, drawBench);
+  const bench = makePicture(scene, 'bench', 230, 110, 125, 100, drawBench);
   village.benches.forEach((spot) => place(scene, bench, spot.x, spot.y));
 
-  const rock = makePicture(scene, 'rock', 120, 80, 60, 70, (g) => drawRock(g, 40));
+  const rock = makePicture(scene, 'rock', 140, 80, 75, 70, (g) => drawRock(g, 40));
   village.rocks.forEach((spot) => place(scene, rock, spot.x, spot.y, spot.size / 40));
 
   const fencePost = makePicture(scene, 'fence-post', 30, 70, 15, 62, drawFencePost);
@@ -82,11 +102,40 @@ export function drawVillage(scene, village) {
   }
 
   const { fountain } = village;
-  const size = fountain.radius * 2 + 40;
+  const size = fountain.radius * 2 + 60;
   const fountainPicture = makePicture(scene, 'fountain', size, size + 120, size / 2, size / 2 + 120, (g) =>
     drawFountain(g, fountain.radius),
   );
   place(scene, fountainPicture, fountain.x, fountain.y);
+}
+
+// The golden haze of the low sun (top right) and slightly darker edges, laid over the whole screen.
+export function addSunsetLight(scene) {
+  const { width, height } = scene.scale;
+  if (!scene.textures.exists('sunset-light')) {
+    // Smooth gradients look the same drawn small and stretched, and use far less memory.
+    const w = width / 5;
+    const h = height / 5;
+    const texture = scene.textures.createCanvas('sunset-light', w, h);
+    const ctx = texture.getContext();
+    const haze = ctx.createRadialGradient(w * 0.95, -h * 0.1, 0, w * 0.95, -h * 0.1, w * 0.95);
+    haze.addColorStop(0, 'rgba(255, 196, 112, 0.26)');
+    haze.addColorStop(1, 'rgba(255, 196, 112, 0)');
+    ctx.fillStyle = haze;
+    ctx.fillRect(0, 0, w, h);
+    const edges = ctx.createRadialGradient(w / 2, h / 2, h * 0.45, w / 2, h / 2, Math.hypot(w, h) / 2);
+    edges.addColorStop(0, 'rgba(90, 40, 15, 0)');
+    edges.addColorStop(1, 'rgba(90, 40, 15, 0.38)');
+    ctx.fillStyle = edges;
+    ctx.fillRect(0, 0, w, h);
+    texture.refresh();
+  }
+  scene.add
+    .image(0, 0, 'sunset-light')
+    .setOrigin(0)
+    .setDisplaySize(width, height)
+    .setScrollFactor(0)
+    .setDepth(LIGHT_DEPTH);
 }
 
 // Draws once into a texture, so the game doesn't redraw every shape on every frame.
@@ -108,7 +157,7 @@ function place(scene, picture, x, y, scale = 1) {
 
 function drawBackdrop(g, v) {
   const top = Phaser.Display.Color.ValueToColor(COLORS.skyTop);
-  const bottom = Phaser.Display.Color.ValueToColor(COLORS.skyBottom);
+  const bottom = Phaser.Display.Color.ValueToColor(COLORS.skyHorizon);
   const bands = 24;
   const bandHeight = v.hillsBottom / bands;
   for (let i = 0; i < bands; i++) {
@@ -116,32 +165,83 @@ function drawBackdrop(g, v) {
     g.fillStyle(Phaser.Display.Color.GetColor(c.r, c.g, c.b));
     g.fillRect(0, i * bandHeight, v.width, bandHeight + 1);
   }
+
+  // The low sun, over on the right
+  const sunX = v.width * 0.8;
+  const sunY = v.hillsBottom * 0.42;
+  for (let i = 5; i > 0; i--) {
+    g.fillStyle(COLORS.sunGlow, 0.12);
+    g.fillCircle(sunX, sunY, 70 + i * 50);
+  }
+  g.fillStyle(COLORS.sun);
+  g.fillCircle(sunX, sunY, 70);
+
   COLORS.hills.forEach((color, i) => {
     const baseY = v.hillsBottom * (0.5 + i * 0.15);
     const amplitude = 45 + i * 10;
     const wavelength = 380 + i * 90;
+    const surface = (x) =>
+      baseY - amplitude * (Math.sin(x / wavelength + i * 1.7) + 0.5 * Math.sin(x / (wavelength * 0.4) + i * 3.9));
     const points = [{ x: 0, y: v.hillsBottom }];
-    for (let x = 0; x <= v.width; x += 40) {
-      points.push({ x, y: baseY - amplitude * (Math.sin(x / wavelength + i * 1.7) + 0.5 * Math.sin(x / (wavelength * 0.4) + i * 3.9)) });
-    }
+    for (let x = 0; x <= v.width; x += 40) points.push({ x, y: surface(x) });
     points.push({ x: v.width, y: v.hillsBottom });
     g.fillStyle(color);
     g.fillPoints(points, true);
-    g.fillStyle(COLORS.mist, 0.18);
+
+    if (i === 1) {
+      for (const x of [1400, 4300]) drawHillTown(g, x, surface(x) + 6);
+    }
+    if (i === 2) {
+      // Rows of round orchard trees on the nearest slope
+      let count = 0;
+      for (let row = 0; row < 3; row++) {
+        const y = v.hillsBottom - 22 - row * 26;
+        for (let x = 20 + (row % 2) * 30; x < v.width; x += 60) {
+          if (y < surface(x) + 14) continue;
+          g.fillStyle(COLORS.shadow, 0.25);
+          g.fillRect(x - 6, y + 2, 20, 6);
+          g.fillStyle(COLORS.orchard[count++ % COLORS.orchard.length]);
+          g.fillRect(x - 9, y - 12, 18, 14);
+        }
+      }
+    }
+    g.fillStyle(COLORS.mist, 0.28);
     for (let x = 0; x < v.width; x += 700) g.fillEllipse(x + 350, baseY + 40, 900, 50, 24);
   });
 }
 
+// A far-away hilltop village: a huddle of houses and a bell tower.
+function drawHillTown(g, x, groundY) {
+  g.fillStyle(COLORS.hillTown);
+  const houses = [
+    [-70, 26, 30],
+    [-40, 34, 40],
+    [-2, 30, 34],
+    [34, 40, 28],
+    [70, 28, 36],
+  ];
+  for (const [dx, width, height] of houses) g.fillRect(x + dx - width / 2, groundY - height, width, height);
+  g.fillRect(x + 12, groundY - 96, 20, 96);
+  g.fillTriangle(x + 10, groundY - 96, x + 34, groundY - 96, x + 22, groundY - 116);
+}
+
 function drawGround(g, v) {
   const random = seededRandom(7);
+  const grassTop = v.hillsBottom + 80;
+  const grassHeight = v.height - grassTop;
 
   g.fillStyle(COLORS.grass);
   g.fillRect(0, v.hillsBottom, v.width, v.height - v.hillsBottom);
   for (let i = 0; i < 90; i++) {
     g.fillStyle(i % 2 ? COLORS.grassDark : COLORS.grassLight, 0.4);
+    g.fillEllipse(random() * v.width, grassTop + random() * grassHeight, 160 + random() * 240, 50 + random() * 60, 16);
+  }
+  // Fallen leaves
+  for (let i = 0; i < 700; i++) {
     const x = random() * v.width;
-    const y = v.hillsBottom + 80 + random() * (v.height - v.hillsBottom - 80);
-    g.fillEllipse(x, y, 160 + random() * 240, 50 + random() * 60, 16);
+    const y = grassTop + random() * grassHeight;
+    g.fillStyle(COLORS.leaves[i % COLORS.leaves.length], 0.85);
+    g.fillTriangle(x - 10, y, x + 10, y - 4, x + 1, y - 15);
   }
   g.fillStyle(COLORS.hedge);
   g.fillRect(0, v.hillsBottom - 6, v.width, 26);
@@ -153,14 +253,26 @@ function drawGround(g, v) {
   g.fillStyle(COLORS.dirt);
   g.fillRect(0, road.y - road.halfWidth, v.width, road.halfWidth * 2);
   for (const lane of v.lanes) g.fillRect(lane.x, lane.y, lane.width, lane.height);
+  // Pebbles in the road
+  for (let i = 0; i < 200; i++) {
+    g.fillStyle(i % 2 ? COLORS.cobble : COLORS.cobbleLight, 0.7);
+    g.fillRect(random() * v.width, road.y - road.halfWidth + 10 + random() * (road.halfWidth * 2 - 30), 14, 9);
+  }
 
+  // The cobbled square, laid in rings around the fountain
   const { square } = v;
-  g.fillStyle(COLORS.stoneEdge);
+  g.fillStyle(COLORS.squareEdge);
   g.fillCircle(square.x, square.y, square.radius + 14);
-  g.fillStyle(COLORS.stone);
+  g.fillStyle(COLORS.square);
   g.fillCircle(square.x, square.y, square.radius);
-  g.lineStyle(6, COLORS.stoneEdge, 0.7);
-  g.strokeCircle(square.x, square.y, square.radius * 0.66);
+  for (const ring of [160, 225, 290, 350]) {
+    const stones = Math.round((2 * Math.PI * ring) / 46);
+    for (let i = 0; i < stones; i++) {
+      const angle = (i / stones) * Math.PI * 2 + ring;
+      g.fillStyle(i % 3 ? COLORS.cobble : COLORS.cobbleLight, 0.65);
+      g.fillRect(square.x + Math.cos(angle) * ring - 14, square.y + Math.sin(angle) * ring - 9, 28, 18);
+    }
+  }
 
   for (const field of v.fields) {
     g.fillStyle(COLORS.soil);
@@ -175,16 +287,19 @@ function drawGround(g, v) {
     }
   }
 
+  // The pond, catching the sunset
   const { pond } = v;
   g.fillStyle(COLORS.waterEdge);
   g.fillEllipse(pond.x, pond.y, pond.radiusX * 2 + 28, pond.radiusY * 2 + 28, 48);
   g.fillStyle(COLORS.water);
   g.fillEllipse(pond.x, pond.y, pond.radiusX * 2, pond.radiusY * 2, 48);
-  g.fillStyle(COLORS.waterLight, 0.6);
-  g.fillEllipse(pond.x - pond.radiusX * 0.3, pond.y - pond.radiusY * 0.35, pond.radiusX * 0.8, pond.radiusY * 0.3, 24);
+  g.fillStyle(COLORS.sunlight, 0.55);
+  g.fillEllipse(pond.x + pond.radiusX * 0.25, pond.y - pond.radiusY * 0.3, pond.radiusX * 0.9, pond.radiusY * 0.22, 24);
+  g.fillStyle(COLORS.sunlight, 0.3);
+  g.fillEllipse(pond.x + pond.radiusX * 0.1, pond.y + pond.radiusY * 0.15, pond.radiusX * 0.6, pond.radiusY * 0.14, 24);
   g.fillStyle(COLORS.sprout);
-  g.fillEllipse(pond.x + 220, pond.y + 70, 56, 28, 12);
-  g.fillEllipse(pond.x + 290, pond.y + 20, 44, 22, 12);
+  g.fillEllipse(pond.x - 260, pond.y + 70, 56, 28, 12);
+  g.fillEllipse(pond.x - 190, pond.y + 110, 44, 22, 12);
 
   // Flowers on both sides of every door
   for (const house of v.houses) {
@@ -204,21 +319,37 @@ function drawHouse(g, house, index) {
   const w = house.width;
   const h = house.wall;
   const roofTop = -h - ROOF_HEIGHT;
+  const random = seededRandom(index + 11);
 
-  g.fillStyle(COLORS.shadow, 0.18);
-  g.fillEllipse(0, 4, w + 70, 36, 24);
+  // Shadow, cast away from the low sun on the right
+  g.fillStyle(COLORS.shadow, 0.32);
+  g.fillEllipse(-34, 6, w + 90, 40, 24);
 
+  // Stone wall, lit on the right
   g.fillStyle(COLORS.walls[index % COLORS.walls.length]);
   g.fillRect(-w / 2, -h, w, h);
-  g.fillStyle(COLORS.shadow, 0.08);
+  for (let i = 0; i < 14; i++) {
+    g.fillStyle(i % 2 ? COLORS.shadow : COLORS.sunlight, i % 2 ? 0.1 : 0.16);
+    g.fillRect(-w / 2 + 8 + random() * (w - 60), -h + 10 + random() * (h - 40), 26 + random() * 24, 12 + random() * 8);
+  }
+  g.fillStyle(COLORS.sunlight, 0.18);
+  g.fillRect(w / 2 - w * 0.22, -h, w * 0.22, h);
+  g.fillStyle(COLORS.shadow, 0.14);
   g.fillRect(-w / 2, -26, w, 26);
 
   if (index % 2 === 0) {
     g.fillStyle(COLORS.chimney);
     g.fillRect(w / 4, roofTop - 30, 36, 80);
+    // Smoke drifting up
+    g.fillStyle(COLORS.smoke, 0.4);
+    g.fillCircle(w / 4 + 12, roofTop - 62, 20);
+    g.fillStyle(COLORS.smoke, 0.28);
+    g.fillCircle(w / 4 - 4, roofTop - 104, 27);
+    g.fillStyle(COLORS.smoke, 0.16);
+    g.fillCircle(w / 4 - 28, roofTop - 146, 34);
   }
 
-  // Seen from above at an angle, the roof is a wide trapezoid
+  // Terracotta roof, seen from above at an angle: a wide trapezoid with rows of tiles
   g.fillStyle(COLORS.roofs[index % COLORS.roofs.length]);
   g.fillPoints(
     [
@@ -229,58 +360,118 @@ function drawHouse(g, house, index) {
     ],
     true,
   );
-  g.fillStyle(COLORS.shadow, 0.12);
-  for (let y = roofTop + 40; y < -h; y += 40) g.fillRect(-w / 2 - 10, y, w + 20, 5);
-  g.fillStyle(COLORS.shadow, 0.2);
+  g.fillStyle(COLORS.shadow, 0.18);
+  for (let y = roofTop + 34; y < -h; y += 34) g.fillRect(-w / 2 - 10, y, w + 20, 6);
+  g.fillStyle(COLORS.sunlight, 0.2);
+  g.fillPoints(
+    [
+      { x: w * 0.12, y: -h },
+      { x: w / 2 + EAVE, y: -h },
+      { x: w / 2 - 30, y: roofTop },
+      { x: w * 0.1, y: roofTop },
+    ],
+    true,
+  );
+  g.fillStyle(COLORS.shadow, 0.28);
   g.fillRect(-w / 2 - EAVE, -h - 12, w + 2 * EAVE, 12);
-  g.fillStyle(0xffffff, 0.15);
-  g.fillRect(-w / 2 + 30, roofTop, w - 60, 14);
+  g.fillStyle(COLORS.sunlight, 0.35);
+  g.fillRect(-w / 2 + 30, roofTop, w - 60, 10);
 
   g.fillStyle(COLORS.door);
-  g.fillRoundedRect(-36, -116, 72, 116, { tl: 32, tr: 32, bl: 0, br: 0 });
-  g.fillStyle(COLORS.window);
-  g.fillCircle(20, -56, 5);
+  g.fillRoundedRect(-32, -112, 64, 112, { tl: 30, tr: 30, bl: 0, br: 0 });
+  g.fillStyle(COLORS.windowLight);
+  g.fillCircle(18, -54, 5);
 
-  for (const x of [-w / 2 + 34, w / 2 - 34 - 64]) {
-    const y = -h + 44;
-    g.fillStyle(COLORS.window);
-    g.fillRect(x, y, 64, 56);
+  // Glowing windows with green shutters
+  for (const x of [-w / 2 + 34, w / 2 - 84]) {
+    const y = -h + 46;
+    g.fillStyle(COLORS.windowLight, 0.25);
+    g.fillEllipse(x + 25, y + 26, 104, 88, 20);
+    g.fillStyle(COLORS.shutter);
+    g.fillRect(x - 18, y - 2, 14, 56);
+    g.fillRect(x + 54, y - 2, 14, 56);
+    g.fillStyle(COLORS.windowLight);
+    g.fillRect(x, y, 50, 52);
     g.lineStyle(6, COLORS.frame);
-    g.strokeRect(x, y, 64, 56);
-    g.lineBetween(x + 32, y, x + 32, y + 56);
+    g.strokeRect(x, y, 50, 52);
+    g.lineBetween(x + 25, y, x + 25, y + 52);
+  }
+
+  // Autumn ivy climbing the wall
+  if (index % 3 !== 1) drawIvy(g, -w / 2, random);
+}
+
+function drawIvy(g, wallLeft, random) {
+  for (let i = 0; i < 46; i++) {
+    const height = random();
+    const x = wallLeft - 8 + random() * 70 * (1 - height * 0.4);
+    const y = -10 - height * 150 - random() * 20;
+    g.fillStyle(COLORS.ivy[i % COLORS.ivy.length]);
+    g.fillEllipse(x, y, 16, 12, 8);
   }
 }
 
-function drawTree(g, canopy) {
-  g.fillStyle(COLORS.shadow, 0.16);
-  g.fillEllipse(0, 0, 130, 36, 20);
+const LEAF_SPOTS = [
+  [-70, -130],
+  [-30, -200],
+  [20, -150],
+  [60, -105],
+  [-10, -95],
+  [75, -150],
+  [-60, -170],
+];
+
+function drawTree(g, leaves) {
+  g.fillStyle(COLORS.shadow, 0.3);
+  g.fillEllipse(-28, 2, 150, 38, 20);
   g.fillStyle(COLORS.trunk);
   g.fillRect(-14, -80, 28, 80);
-  g.fillStyle(canopy);
+  g.fillStyle(leaves);
   g.fillCircle(-52, -120, 62);
   g.fillCircle(52, -120, 62);
   g.fillCircle(0, -165, 82);
-  g.fillStyle(0xffffff, 0.12);
-  g.fillCircle(-22, -190, 38);
+  // Shade on the side away from the sun, light on the side facing it
+  g.fillStyle(COLORS.shadow, 0.22);
+  g.fillCircle(-60, -112, 48);
+  g.fillStyle(COLORS.sunlight, 0.38);
+  g.fillCircle(30, -190, 44);
+  g.fillCircle(70, -132, 28);
+  g.fillStyle(COLORS.sunlight, 0.5);
+  for (const [x, y] of LEAF_SPOTS) g.fillCircle(x, y, 8);
+}
+
+function drawCypress(g) {
+  g.fillStyle(COLORS.shadow, 0.22);
+  g.fillEllipse(-22, 2, 90, 26, 16);
+  g.fillStyle(COLORS.trunk);
+  g.fillRect(-8, -30, 16, 30);
+  g.fillStyle(COLORS.cypress);
+  g.fillEllipse(0, -150, 84, 260, 24);
+  g.fillTriangle(-30, -230, 30, -230, 0, -330);
+  g.fillStyle(COLORS.sunlight, 0.2);
+  g.fillEllipse(18, -170, 30, 200, 16);
 }
 
 function drawLamp(g) {
-  g.fillStyle(COLORS.shadow, 0.15);
-  g.fillEllipse(0, 0, 50, 16, 12);
+  g.fillStyle(COLORS.shadow, 0.22);
+  g.fillEllipse(-14, 0, 60, 16, 12);
+  g.fillStyle(COLORS.lampGlow, 0.18);
+  g.fillCircle(0, -186, 64);
+  g.fillStyle(COLORS.lampGlow, 0.3);
+  g.fillCircle(0, -186, 38);
   g.fillStyle(COLORS.lampPost);
   g.fillRect(-6, -170, 12, 170);
   g.fillRect(-14, -12, 28, 12);
-  g.fillStyle(COLORS.lampLight, 0.35);
-  g.fillCircle(0, -186, 30);
-  g.fillStyle(COLORS.lampLight);
+  g.fillStyle(COLORS.windowLight);
   g.fillRect(-12, -200, 24, 30);
   g.fillStyle(COLORS.lampPost);
   g.fillRect(-16, -206, 32, 8);
+  g.fillRect(-14, -172, 28, 6);
 }
 
 function drawBench(g) {
-  g.fillStyle(COLORS.shadow, 0.15);
-  g.fillEllipse(0, 0, 180, 24, 16);
+  g.fillStyle(COLORS.shadow, 0.22);
+  g.fillEllipse(-20, 0, 190, 24, 16);
   g.fillStyle(COLORS.woodDark);
   g.fillRect(-70, -40, 10, 40);
   g.fillRect(60, -40, 10, 40);
@@ -290,15 +481,18 @@ function drawBench(g) {
   g.fillRect(-80, -48, 160, 14);
   g.fillRect(-80, -88, 160, 12);
   g.fillRect(-80, -70, 160, 10);
+  g.fillStyle(COLORS.sunlight, 0.25);
+  g.fillRect(-80, -48, 160, 4);
+  g.fillRect(-80, -88, 160, 4);
 }
 
 function drawRock(g, size) {
-  g.fillStyle(COLORS.shadow, 0.15);
-  g.fillEllipse(0, 0, size * 2.4, size * 0.7, 16);
+  g.fillStyle(COLORS.shadow, 0.22);
+  g.fillEllipse(-size * 0.4, 0, size * 2.4, size * 0.7, 16);
   g.fillStyle(COLORS.rock);
   g.fillEllipse(0, -size * 0.45, size * 2.1, size * 1.3, 20);
   g.fillStyle(COLORS.rockLight);
-  g.fillEllipse(-size * 0.3, -size * 0.7, size * 0.9, size * 0.5, 12);
+  g.fillEllipse(size * 0.3, -size * 0.7, size * 0.9, size * 0.5, 12);
 }
 
 function drawFencePost(g) {
@@ -322,19 +516,21 @@ function drawFenceDown(g) {
 }
 
 function drawFountain(g, radius) {
-  g.fillStyle(COLORS.shadow, 0.15);
-  g.fillCircle(6, 10, radius + 8);
-  g.fillStyle(COLORS.stoneEdge);
+  g.fillStyle(COLORS.shadow, 0.22);
+  g.fillCircle(-14, 10, radius + 8);
+  g.fillStyle(COLORS.stoneDark);
   g.fillCircle(0, 0, radius);
+  g.fillStyle(COLORS.stone);
+  g.fillCircle(0, 0, radius - 8);
   g.fillStyle(COLORS.water);
-  g.fillCircle(0, 0, radius - 16);
-  g.fillStyle(COLORS.waterLight, 0.6);
-  g.fillEllipse(-radius * 0.3, -radius * 0.35, radius * 0.7, radius * 0.25, 16);
-  g.fillStyle(COLORS.stoneEdge);
+  g.fillCircle(0, 0, radius - 22);
+  g.fillStyle(COLORS.sunlight, 0.5);
+  g.fillEllipse(radius * 0.2, -radius * 0.3, radius * 0.8, radius * 0.22, 16);
+  g.fillStyle(COLORS.stoneDark);
   g.fillRect(-14, -110, 28, 110);
   g.fillStyle(COLORS.stone);
   g.fillEllipse(0, -110, 76, 26, 16);
-  g.fillStyle(COLORS.waterLight, 0.9);
+  g.fillStyle(COLORS.smoke, 0.9);
   g.fillCircle(0, -130, 14);
   g.fillCircle(-26, -100, 8);
   g.fillCircle(26, -100, 8);
