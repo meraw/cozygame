@@ -1,0 +1,10 @@
+node_modules/
+dist/
+
+# The owner's private files stay on this computer only, because the GitHub repository is public.
+design.md
+CLAUDE.md
+
+# Local-only Claude Code files
+.claude/settings.local.json
+.claude/launch.json
