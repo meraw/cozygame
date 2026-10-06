@@ -2,7 +2,7 @@
 // Uses the Microsoft Edge already installed on this computer, with a touch screen.
 //
 // Usage: npm run screenshot -- <url> <file.png> [x,y ...]
-// Each x,y is a tap in screen pixels; after each tap the script waits for the walk to finish.
+// Each x,y is a tap in screen pixels (x,y,2 is a double tap); after each one the script waits for the walk to finish.
 
 import { chromium } from 'playwright-core';
 
@@ -24,8 +24,11 @@ try {
   await page.waitForSelector('canvas');
   await page.waitForTimeout(1500);
   for (const tap of taps) {
-    const [x, y] = tap.split(',').map(Number);
-    await page.touchscreen.tap(x, y);
+    const [x, y, count = 1] = tap.split(',').map(Number);
+    for (let i = 0; i < count; i++) {
+      if (i > 0) await page.waitForTimeout(100);
+      await page.touchscreen.tap(x, y);
+    }
     await page.waitForTimeout(WAIT_AFTER_TAP_MS);
   }
   await page.screenshot({ path: file });

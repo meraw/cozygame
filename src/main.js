@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { showDebugInfo } from './debugInfo.js';
+import { HouseScene } from './scenes/HouseScene.js';
 import { VillageScene } from './scenes/VillageScene.js';
 
 const game = new Phaser.Game({
@@ -14,7 +15,8 @@ const game = new Phaser.Game({
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  scene: [VillageScene],
+  // The first scene starts the game; the others start when the player walks into them.
+  scene: [VillageScene, HouseScene],
 });
 
 // When the tablet is turned, Phaser can measure the screen too early and keep the old size,
@@ -25,4 +27,8 @@ new ResizeObserver(() => {
   game.scale.refresh();
 }).observe(document.getElementById('game'));
 
-if (new URLSearchParams(window.location.search).has('debug')) showDebugInfo(game);
+if (new URLSearchParams(window.location.search).has('debug')) {
+  showDebugInfo(game);
+  // Lets automated tests look inside the running game
+  window.cozy = { game };
+}

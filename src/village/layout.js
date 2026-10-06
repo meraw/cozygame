@@ -91,6 +91,14 @@ export function houseBounds(house) {
   return { left: house.x - width / 2, top: house.baseY - height, width, height };
 }
 
+// Each house's front door: the area you can tap, and the step in front of it where you stand.
+export function houseDoors(houses) {
+  return houses.map((house) => ({
+    area: { left: house.x - 60, right: house.x + 60, top: house.baseY - 150, bottom: house.baseY + 30 },
+    step: { x: house.x, y: house.baseY + 60 },
+  }));
+}
+
 // Which cells of the village can be walked on. Everything solid is grown by the player's
 // radius, so the player's body never overlaps a house or a tree.
 export function buildWalkGrid(v = village) {
