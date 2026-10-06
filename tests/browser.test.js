@@ -4,8 +4,11 @@ import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { build, preview } from 'vite';
 import { afterAll, beforeAll, expect, test } from 'vitest';
+import mayorFile from '../dialogue/mayor.txt?raw';
+import { office } from '../src/house/office.js';
 import { roomDoor } from '../src/house/room.js';
 import { houseDoors, village, villageDoors } from '../src/village/layout.js';
+import { parseDialogue } from '../src/world/conversation.js';
 import { isNearDoor } from '../src/world/doors.js';
 
 // These tests play the real game in Chrome, pretending to be an Android tablet with a touch screen.
@@ -100,6 +103,14 @@ function playerInVillage(page) {
   });
 }
 
+// Whether the dialogue box is open, and which line of the conversation it's on.
+function dialogue(page) {
+  return page.evaluate(() => {
+    const scene = window.cozy.game.scene.getScene('House');
+    return { open: scene.dialogueBox.isOpen, line: scene.talk ? scene.talk.index : -1 };
+  });
+}
+
 function interiorShown(page) {
   return page.evaluate(() => window.cozy.game.scene.getScene('House').interior);
 }
@@ -165,7 +176,7 @@ test('double-tapping the door you stand at takes you into the house, and back ou
   expect(isNearDoor(await playerInVillage(page), door)).toBe(true);
 }, 120_000);
 
-test("the town hall's door leads into the mayor's office", async () => {
+test("the town hall's door leads into the mayor's office, where you can talk to the Mayor", async () => {
   const page = await openGame(SIDEWAYS);
   const { townHall } = village;
   const door = villageDoors(village).at(-1);
@@ -180,6 +191,18 @@ test("the town hall's door leads into the mayor's office", async () => {
   await doubleTap(page, 'Village', middleOfDoor);
   await expect.poll(() => activeScenes(page), SLOW).toBe('House');
   expect(await interiorShown(page)).toBe('office');
+
+  // Tapping the Mayor opens the dialogue; each tap shows his next line, and the tap after the last closes it
+  const lines = parseDialogue(mayorFile);
+  const elsewhere = { x: 700, y: 1000 };
+  await tap(page, 'House', { x: office.mayor.x, y: office.mayor.y - 140 });
+  await expect.poll(() => dialogue(page)).toEqual({ open: true, line: 0 });
+  for (let line = 1; line < lines.length; line++) {
+    await tap(page, 'House', elsewhere);
+    await expect.poll(() => dialogue(page)).toEqual({ open: true, line });
+  }
+  await tap(page, 'House', elsewhere);
+  await expect.poll(() => dialogue(page)).toEqual({ open: false, line: lines.length });
 
   await doubleTap(page, 'House', { x: roomDoor.step.x, y: roomDoor.area.bottom - 20 });
   await expect.poll(() => activeScenes(page), SLOW).toBe('Village');

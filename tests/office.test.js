@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { buildOfficeGrid, office } from '../src/house/office.js';
+import { buildOfficeGrid, isOnMayor, office } from '../src/house/office.js';
 import { room, roomDoor } from '../src/house/room.js';
 import { village, villageDoors } from '../src/village/layout.js';
 import { isNearDoor } from '../src/world/doors.js';
@@ -42,6 +42,14 @@ describe("the mayor's office", () => {
       expect(isWalkable(grid, cell.col, cell.row)).toBe(true);
       expect(planPath(grid, roomDoor.step, spot)?.at(-1)).toEqual(spot);
     }
+  });
+
+  test('the Mayor stands behind his desk, and a tap on him is a tap on him', () => {
+    const { mayor } = office;
+    expect(mayor.y).toBeLessThan(desk.y);
+    expect(isOnMayor({ x: mayor.x, y: mayor.y - 140 })).toBe(true);
+    expect(isOnMayor(inFrontOfDesk)).toBe(false);
+    expect(isOnMayor({ x: desk.x - 150, y: desk.y - 140 })).toBe(false);
   });
 
   test('from the desk, one tap on the door walks you back to it', () => {

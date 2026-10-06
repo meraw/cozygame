@@ -11,6 +11,8 @@ export const office = {
   // The desk's back reaches the wall: behind it is the mayor's side
   desk: { x: 1180, y: 800, width: 520 },
   mayorChair: { x: 1180, y: 690 },
+  // The Mayor stands behind his desk, beside his chair
+  mayor: { x: 1320, y: 700 },
   visitorChairs: [
     { x: 1050, y: 1000 },
     { x: 1310, y: 1000 },
@@ -22,6 +24,12 @@ export const office = {
     { x: 1680, y: 760, kind: 'europe' },
   ],
 };
+
+// Whether a tap lands on the Mayor: on the part of him that shows above the desk.
+export function isOnMayor(point) {
+  const { mayor } = office;
+  return Math.abs(point.x - mayor.x) <= 70 && point.y >= mayor.y - 240 && point.y <= mayor.y - 50;
+}
 
 // The room's floor, minus the furniture (grown by the player's radius, like everything solid).
 export function buildOfficeGrid() {
