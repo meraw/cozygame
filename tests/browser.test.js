@@ -21,8 +21,9 @@ beforeAll(async () => {
   await build({ logLevel: 'silent', build: { outDir, emptyOutDir: true } });
   server = await preview({ logLevel: 'silent', build: { outDir }, preview: { port: 4180, strictPort: false } });
   // Google Chrome, as installed on this computer and on GitHub's build machines. Without the
-  // graphics card, like on GitHub, so the game runs just as slowly here and timing problems show up.
-  browser = await chromium.launch({ channel: 'chrome', args: ['--disable-gpu'] });
+  // graphics card, like on GitHub, so timing problems show up here too. Without a graphics card,
+  // Chrome's software WebGL is very slow, so the game uses its plain Canvas drawing instead.
+  browser = await chromium.launch({ channel: 'chrome', args: ['--disable-gpu', '--disable-webgl'] });
 }, 120_000);
 
 afterAll(async () => {
@@ -118,6 +119,15 @@ test('the whole game fits the screen after turning the tablet either way', async
 
 test('double-tapping the door you stand at takes you into the house, and back out the same way', async () => {
   const page = await openGame(SIDEWAYS);
+  if (process.env.GITHUB_ACTIONS) {
+    // Shows up as a note on the GitHub run, to see how fast the game runs there
+    await page.waitForTimeout(2000);
+    const speed = await page.evaluate(() => {
+      const { game } = window.cozy;
+      return `${game.renderer.type === 2 ? 'WebGL' : 'Canvas'}, ${Math.round(game.loop.actualFps)} fps`;
+    });
+    console.log(`::notice::Game speed in the browser test: ${speed}`);
+  }
   const house = village.houses[0];
   const door = houseDoors(village.houses)[0];
   const middleOfDoor = { x: house.x, y: house.baseY - 56 };
