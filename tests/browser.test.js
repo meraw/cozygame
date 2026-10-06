@@ -7,7 +7,7 @@ import { afterAll, beforeAll, expect, test } from 'vitest';
 import mayorFile from '../dialogue/mayor.txt?raw';
 import { office } from '../src/house/office.js';
 import { roomDoor } from '../src/house/room.js';
-import { houseDoors, village, villageDoors } from '../src/village/layout.js';
+import { houseDoors, restorableNames, village, villageDoors } from '../src/village/layout.js';
 import { parseDialogue } from '../src/world/conversation.js';
 import { isNearDoor } from '../src/world/doors.js';
 
@@ -35,12 +35,17 @@ afterAll(async () => {
   rmSync(outDir, { recursive: true, force: true });
 });
 
-// Opens the game with ?debug, which lets the test look inside it.
+// Opens the game with ?debug, which lets the test look inside it. Each page starts with
+// nothing saved, like a tablet opening the game for the first time.
 async function openGame(viewport) {
   const page = await browser.newPage({ viewport, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   await page.goto(`${server.resolvedUrls.local[0]}?debug`);
-  await page.waitForFunction(() => window.cozy?.game.scene.isActive('Village'), null, { timeout: 15_000 });
+  await waitForVillage(page);
   return page;
+}
+
+function waitForVillage(page) {
+  return page.waitForFunction(() => window.cozy?.game.scene.isActive('Village'), null, { timeout: 15_000 });
 }
 
 // The game is entirely on screen, and as big as the screen allows (filling its width or its height).
@@ -115,6 +120,16 @@ function interiorShown(page) {
   return page.evaluate(() => window.cozy.game.scene.getScene('House').interior);
 }
 
+// Which look each drained thing in the village is showing right now: 'decayed' or 'restored'.
+function looks(page) {
+  return page.evaluate(() => {
+    const { restorables } = window.cozy.game.scene.getScene('Village');
+    const lookOf = ({ image, looks }) =>
+      Object.keys(looks).find((look) => looks[look].key === image.texture.key) ?? 'neither';
+    return Object.fromEntries(Object.entries(restorables).map(([name, thing]) => [name, lookOf(thing)]));
+  });
+}
+
 // Without a graphics card the game runs in slow motion, so allow plenty of time for walks and fades.
 const SLOW = { timeout: 30_000 };
 
@@ -146,6 +161,22 @@ test('the whole game fits the screen after turning the tablet either way', async
     await page.setViewportSize(viewport);
     await expect.poll(() => gameFitsScreen(page), { timeout: 5000 }).toBe(true);
   }
+}, 60_000);
+
+test('the drained things start decayed, and one restored stays restored after reopening the game', async () => {
+  const page = await openGame(SIDEWAYS);
+  const allDecayed = Object.fromEntries(restorableNames(village).map((name) => [name, 'decayed']));
+  expect(await looks(page)).toEqual(allDecayed);
+
+  // Restoring the house (with its switch in the ?debug box) changes its look straight away
+  await page.getByRole('button', { name: /student-house/ }).tap();
+  const houseRestored = { ...allDecayed, 'student-house': 'restored' };
+  await expect.poll(() => looks(page)).toEqual(houseRestored);
+
+  // Reopening the game loads everything from scratch: the house is still restored
+  await page.reload();
+  await waitForVillage(page);
+  expect(await looks(page)).toEqual(houseRestored);
 }, 60_000);
 
 test('double-tapping the door you stand at takes you into the house, and back out the same way', async () => {

@@ -1,7 +1,10 @@
 import Phaser from 'phaser';
 import { showDebugInfo } from './debugInfo.js';
+import { showDebugSwitches } from './debugSwitches.js';
+import { save } from './save.js';
 import { HouseScene } from './scenes/HouseScene.js';
 import { VillageScene } from './scenes/VillageScene.js';
+import { restorableNames } from './village/layout.js';
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -29,6 +32,7 @@ new ResizeObserver(() => {
 
 if (new URLSearchParams(window.location.search).has('debug')) {
   showDebugInfo(game);
+  showDebugSwitches(save, restorableNames());
   // Lets automated tests look inside the running game
   window.cozy = { game };
 }

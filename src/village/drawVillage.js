@@ -60,25 +60,71 @@ const COLORS = {
   shadow: 0x4a2410,
 };
 
+// The two looks of anything the vampires can drain: as it should be, and with the life drained
+// out of it (greyed, cracked, drooping). Everything else only ever looks restored.
+const RESTORED = { decayed: false, colors: COLORS };
+const DECAYED = {
+  decayed: true,
+  colors: {
+    ...drainedColors(COLORS),
+    // Drained earth dries out pale, so its cracks and dead plants show up dark against it
+    dryEarth: 0x8f8a86,
+    crack: 0x48444a,
+    deadPlant: 0x55514f,
+    // Windows with no light left inside
+    darkWindow: 0x3a373e,
+  },
+};
+
 const GROUND_DEPTH = -100000;
+// Fields lie flat: above the ground, but under everything that stands up
+const FIELD_DEPTH = GROUND_DEPTH + 1;
 const LIGHT_DEPTH = 5e8;
 const FENCE_STEP = 80;
+// How far a house's picture reaches in front of its wall: room for the flowers by its door
+const HOUSE_FRONT = 70;
+// How far the ridge of a decayed house's roof sags in the middle
+const ROOF_SAG = 22;
 // Which kind of tree stands at each spot, in turn: mostly autumn colours, now and then a cypress.
 const TREE_KINDS = ['orange', 'gold', 'rust', 'orange', 'cypress', 'gold', 'orange', 'olive', 'rust'];
 
 // Draws the whole village. The flat ground is one drawing under everything; anything that
 // stands up (houses, trees...) is its own picture, layered by how far down the screen its
 // base is, so the player walks behind things above them and in front of things below.
+// Returns the drained things (marked restorable in the layout) by name: the picture showing
+// each one and both of its looks, so the scene can show the look the save calls for.
 export function drawVillage(scene, village) {
   const ground = scene.add.graphics().setDepth(GROUND_DEPTH);
   drawBackdrop(ground, village);
   drawGround(ground, village);
 
+  const restorables = {};
+  // Places a thing drawn by picture(look). For a drained thing, both of its looks are drawn.
+  const placeThing = (thing, picture, x, y) => {
+    const image = place(scene, picture(RESTORED), x, y);
+    if (thing.restorable) {
+      restorables[thing.restorable] = { image, looks: { restored: picture(RESTORED), decayed: picture(DECAYED) } };
+    }
+    return image;
+  };
+
+  village.fields.forEach((field, i) => {
+    const picture = (look) =>
+      makePicture(scene, lookKey(`field-${i}`, look), field.width, field.height, 0, 0, (g) =>
+        drawField(g, field.width, field.height, look),
+      );
+    placeThing(field, picture, field.x, field.y).setDepth(FIELD_DEPTH);
+  });
+
   village.houses.forEach((house, i) => {
     const width = house.width + 2 * EAVE + 100;
-    const height = house.wall + ROOF_HEIGHT + 224;
-    const picture = makePicture(scene, `house-${i}`, width, height, width / 2, height - 24, (g) => drawHouse(g, house, i));
-    place(scene, picture, house.x, house.baseY);
+    // Room above the roof for chimney smoke, and in front of the wall for the flowers
+    const height = house.wall + ROOF_HEIGHT + 200 + HOUSE_FRONT;
+    const picture = (look) =>
+      makePicture(scene, lookKey(`house-${i}`, look), width, height, width / 2, height - HOUSE_FRONT, (g) =>
+        drawHouse(g, house, i, look),
+      );
+    placeThing(house, picture, house.x, house.baseY);
   });
 
   const hall = village.townHall;
@@ -98,8 +144,8 @@ export function drawVillage(scene, village) {
   const lamp = makePicture(scene, 'lamp', 150, 290, 75, 270, drawLamp);
   village.lamps.forEach((spot) => place(scene, lamp, spot.x, spot.y));
 
-  const bench = makePicture(scene, 'bench', 230, 110, 125, 100, drawBench);
-  village.benches.forEach((spot) => place(scene, bench, spot.x, spot.y));
+  const bench = (look) => makePicture(scene, lookKey('bench', look), 230, 110, 125, 100, (g) => drawBench(g, look));
+  for (const spot of village.benches) placeThing(spot, bench, spot.x, spot.y);
 
   const rock = makePicture(scene, 'rock', 140, 80, 75, 70, (g) => drawRock(g, 40));
   village.rocks.forEach((spot) => place(scene, rock, spot.x, spot.y, spot.size / 40));
@@ -122,6 +168,30 @@ export function drawVillage(scene, village) {
     drawFountain(g, fountain.radius),
   );
   place(scene, fountainPicture, fountain.x, fountain.y);
+  return restorables;
+}
+
+// Each look of a thing is a picture of its own.
+function lookKey(key, look) {
+  return look.decayed ? `${key}-decayed` : key;
+}
+
+// A colour with the life drained out of it: nearly all grey, a touch cold, and a little darker.
+function drained(color) {
+  const r = (color >> 16) & 0xff;
+  const g = (color >> 8) & 0xff;
+  const b = color & 0xff;
+  const grey = 0.3 * r + 0.59 * g + 0.11 * b;
+  const channel = (value, tint) =>
+    Math.min(255, Math.max(0, Math.round((grey + (value - grey) * 0.15) * 0.88 + tint)));
+  return (channel(r, -2) << 16) | (channel(g, 0) << 8) | channel(b, 6);
+}
+
+// The same set of colours (lists and groups too), drained.
+function drainedColors(colors) {
+  if (typeof colors === 'number') return drained(colors);
+  if (Array.isArray(colors)) return colors.map(drainedColors);
+  return Object.fromEntries(Object.entries(colors).map(([name, value]) => [name, drainedColors(value)]));
 }
 
 // The golden haze of the low sun (top right) and slightly darker edges, laid over the whole screen.
@@ -272,19 +342,6 @@ function drawGround(g, v) {
     }
   }
 
-  for (const field of v.fields) {
-    g.fillStyle(COLORS.soil);
-    g.fillRect(field.x, field.y, field.width, field.height);
-    for (let y = field.y + 40; y < field.y + field.height - 20; y += 60) {
-      g.fillStyle(COLORS.furrow);
-      g.fillRect(field.x + 16, y, field.width - 32, 12);
-      g.fillStyle(COLORS.sprout);
-      for (let x = field.x + 50; x < field.x + field.width - 30; x += 70) {
-        g.fillTriangle(x - 12, y + 4, x + 12, y + 4, x, y - 24);
-      }
-    }
-  }
-
   // The pond, catching the sunset
   const { pond } = v;
   g.fillStyle(COLORS.waterEdge);
@@ -299,106 +356,291 @@ function drawGround(g, v) {
   g.fillEllipse(pond.x - 260, pond.y + 70, 56, 28, 12);
   g.fillEllipse(pond.x - 190, pond.y + 110, 44, 22, 12);
 
-  // Flowers on both sides of every door
-  for (const house of v.houses) {
-    drawFlowers(g, house.x - 110, house.baseY + 40, random);
-    drawFlowers(g, house.x + 110, house.baseY + 40, random);
-  }
+  // Flowers on both sides of the town hall's door (houses have theirs in their own pictures)
   drawFlowers(g, v.townHall.x - 150, v.townHall.baseY + 40, random);
   drawFlowers(g, v.townHall.x + 150, v.townHall.baseY + 40, random);
 }
 
-function drawFlowers(g, x, y, random) {
+function drawFlowers(g, x, y, random, colors = COLORS) {
   for (let i = 0; i < 7; i++) {
-    g.fillStyle(COLORS.flowers[Math.floor(random() * COLORS.flowers.length)]);
+    g.fillStyle(colors.flowers[Math.floor(random() * colors.flowers.length)]);
     g.fillEllipse(x + (random() - 0.5) * 80, y + (random() - 0.5) * 30, 16, 14, 8);
   }
 }
 
-function drawHouse(g, house, index) {
+// Drained flowers: grey, their heads hanging from bent stems. Same spots as drawFlowers.
+function drawWiltedFlowers(g, x, y, random, colors) {
+  for (let i = 0; i < 7; i++) {
+    const color = colors.flowers[Math.floor(random() * colors.flowers.length)];
+    const fx = x + (random() - 0.5) * 80;
+    const fy = y + (random() - 0.5) * 30;
+    const lean = i % 2 ? 1 : -1;
+    g.lineStyle(3, colors.deadPlant);
+    g.strokePoints([
+      { x: fx, y: fy + 6 },
+      { x: fx + lean * 2, y: fy - 10 },
+      { x: fx + lean * 9, y: fy - 13 },
+    ]);
+    g.fillStyle(color);
+    g.fillEllipse(fx + lean * 11, fy - 6, 10, 12, 8);
+  }
+}
+
+// A field: rows of seedlings in dark soil. Drained, the earth dries out pale and cracks,
+// and the seedlings wilt.
+function drawField(g, width, height, { colors, decayed }) {
+  g.fillStyle(decayed ? colors.dryEarth : colors.soil);
+  g.fillRect(0, 0, width, height);
+  if (decayed) drawCrackedEarth(g, width, height, colors);
+  for (let row = 0, y = 40; y < height - 20; row++, y += 60) {
+    g.fillStyle(colors.furrow, decayed ? 0.45 : 1);
+    g.fillRect(16, y, width - 32, 12);
+    for (let column = 0, x = 50; x < width - 30; column++, x += 70) {
+      if (decayed) {
+        drawWiltedSeedling(g, x, y, (row + column) % 3 ? 1 : -1, colors);
+      } else {
+        g.fillStyle(colors.sprout);
+        g.fillTriangle(x - 12, y + 4, x + 12, y + 4, x, y - 24);
+      }
+    }
+  }
+}
+
+// Dry earth, split into uneven plates like a dried-up puddle.
+function drawCrackedEarth(g, width, height, colors) {
+  const random = seededRandom(23);
+  const columns = Math.round(width / 80);
+  const rows = Math.round(height / 70);
+  // Where the cracks meet: a grid, nudged about so the plates come out uneven
+  const nudge = (n, count) => (n > 0 && n < count ? (random() - 0.5) * 44 : 0);
+  const corners = Array.from({ length: rows + 1 }, (_, row) =>
+    Array.from({ length: columns + 1 }, (_, column) => ({
+      x: (column * width) / columns + nudge(column, columns),
+      y: (row * height) / rows + nudge(row, rows),
+    })),
+  );
+  g.lineStyle(3, colors.crack, 0.7);
+  const crack = (from, to) => {
+    // Not every plate has split from its neighbour yet
+    if (random() < 0.15) return;
+    const bend = (random() - 0.5) * 18;
+    g.strokePoints([from, { x: (from.x + to.x) / 2 + bend, y: (from.y + to.y) / 2 - bend }, to]);
+  };
+  for (let row = 0; row <= rows; row++) {
+    for (let column = 0; column <= columns; column++) {
+      const corner = corners[row][column];
+      if (column < columns && row > 0 && row < rows) crack(corner, corners[row][column + 1]);
+      if (row < rows && column > 0 && column < columns) crack(corner, corners[row + 1][column]);
+    }
+  }
+}
+
+// A dead seedling: its stem bent over, its leaves hanging limp. lean is 1 to droop right, -1 left.
+function drawWiltedSeedling(g, x, y, lean, colors) {
+  const tip = { x: x + lean * 16, y: y - 12 };
+  g.lineStyle(4, colors.deadPlant);
+  g.strokePoints([{ x, y: y + 4 }, { x: x + lean * 2, y: y - 14 }, { x: x + lean * 9, y: y - 22 }, tip]);
+  g.fillStyle(colors.deadPlant);
+  g.fillTriangle(tip.x - 4, tip.y - 2, tip.x + 4, tip.y - 2, tip.x + lean * 2, tip.y + 13);
+  g.fillTriangle(x - lean, y - 8, x - lean * 4, y - 12, x - lean * 13, y + 2);
+}
+
+function drawHouse(g, house, index, look) {
+  const { colors, decayed } = look;
   const w = house.width;
   const h = house.wall;
   const roofTop = -h - ROOF_HEIGHT;
   const random = seededRandom(index + 11);
 
   // Shadow, cast away from the low sun on the right
-  g.fillStyle(COLORS.shadow, 0.32);
+  g.fillStyle(colors.shadow, 0.32);
   g.fillEllipse(-34, 6, w + 90, 40, 24);
 
   // Stone wall, lit on the right
-  g.fillStyle(COLORS.walls[index % COLORS.walls.length]);
+  g.fillStyle(colors.walls[index % colors.walls.length]);
   g.fillRect(-w / 2, -h, w, h);
   for (let i = 0; i < 14; i++) {
-    g.fillStyle(i % 2 ? COLORS.shadow : COLORS.sunlight, i % 2 ? 0.1 : 0.16);
+    g.fillStyle(i % 2 ? colors.shadow : colors.sunlight, i % 2 ? 0.1 : 0.16);
     g.fillRect(-w / 2 + 8 + random() * (w - 60), -h + 10 + random() * (h - 40), 26 + random() * 24, 12 + random() * 8);
   }
-  g.fillStyle(COLORS.sunlight, 0.18);
+  g.fillStyle(colors.sunlight, 0.18);
   g.fillRect(w / 2 - w * 0.22, -h, w * 0.22, h);
-  g.fillStyle(COLORS.shadow, 0.14);
+  g.fillStyle(colors.shadow, 0.14);
   g.fillRect(-w / 2, -26, w, 26);
+  if (decayed) drawWallCracks(g, w, h, colors);
 
   if (index % 2 === 0) {
-    g.fillStyle(COLORS.chimney);
-    g.fillRect(w / 4, roofTop - 30, 36, 80);
-    // Smoke drifting up
-    g.fillStyle(COLORS.smoke, 0.4);
-    g.fillCircle(w / 4 + 12, roofTop - 62, 20);
-    g.fillStyle(COLORS.smoke, 0.28);
-    g.fillCircle(w / 4 - 4, roofTop - 104, 27);
-    g.fillStyle(COLORS.smoke, 0.16);
-    g.fillCircle(w / 4 - 28, roofTop - 146, 34);
+    const x = w / 4;
+    const top = roofTop - 30;
+    g.fillStyle(colors.chimney);
+    if (decayed) {
+      // Gone cold, and crumbling at the top
+      g.fillPoints(
+        [
+          { x, y: top + 80 },
+          { x, y: top + 6 },
+          { x: x + 9, y: top },
+          { x: x + 16, y: top + 12 },
+          { x: x + 25, y: top + 4 },
+          { x: x + 36, y: top + 18 },
+          { x: x + 36, y: top + 80 },
+        ],
+        true,
+      );
+    } else {
+      g.fillRect(x, top, 36, 80);
+      // Smoke drifting up
+      g.fillStyle(colors.smoke, 0.4);
+      g.fillCircle(x + 12, roofTop - 62, 20);
+      g.fillStyle(colors.smoke, 0.28);
+      g.fillCircle(x - 4, roofTop - 104, 27);
+      g.fillStyle(colors.smoke, 0.16);
+      g.fillCircle(x - 28, roofTop - 146, 34);
+    }
   }
 
-  // Terracotta roof, seen from above at an angle: a wide trapezoid with rows of tiles
-  g.fillStyle(COLORS.roofs[index % COLORS.roofs.length]);
-  g.fillPoints(
-    [
-      { x: -w / 2 - EAVE, y: -h },
-      { x: w / 2 + EAVE, y: -h },
-      { x: w / 2 - 30, y: roofTop },
-      { x: -w / 2 + 30, y: roofTop },
-    ],
-    true,
-  );
-  g.fillStyle(COLORS.shadow, 0.18);
+  drawRoof(g, w, h, index, look);
+  drawFrontDoor(g, look);
+  drawWindows(g, w, h, look);
+
+  // Autumn ivy climbing the wall; drained, it hangs dead from the eave
+  if (index % 3 !== 1) {
+    if (decayed) drawDeadIvy(g, -w / 2, -h, random, colors);
+    else drawIvy(g, -w / 2, random);
+  }
+
+  // Flowers on both sides of the door
+  const flowerRandom = seededRandom(index + 51);
+  for (const x of [-110, 110]) {
+    if (decayed) drawWiltedFlowers(g, x, 40, flowerRandom, colors);
+    else drawFlowers(g, x, 40, flowerRandom, colors);
+  }
+}
+
+// Cracks running through a drained house's plaster.
+function drawWallCracks(g, w, h, colors) {
+  const cracks = [
+    // From the top left corner, down beside the window
+    [[-w / 2 + 4, -h + 8], [-w / 2 + 22, -h + 30], [-w / 2 + 14, -h + 56], [-w / 2 + 30, -h + 84], [-w / 2 + 24, -h + 104]],
+    // From under the eave down towards the door
+    [[44, -h], [52, -h + 22], [42, -h + 44], [50, -h + 70], [40, -h + 92]],
+    // Across the bottom right
+    [[w / 2, -64], [w / 2 - 20, -54], [w / 2 - 34, -66], [w / 2 - 56, -48], [w / 2 - 70, -56]],
+  ];
+  g.lineStyle(4, colors.crack, 0.85);
+  for (const crack of cracks) g.strokePoints(crack.map(([x, y]) => ({ x, y })));
+}
+
+// Terracotta roof, seen from above at an angle: a wide trapezoid with rows of tiles.
+// Drained, its ridge sags in the middle and some tiles have slipped off.
+function drawRoof(g, w, h, index, { colors, decayed }) {
+  const roofTop = -h - ROOF_HEIGHT;
+  const ridgeLeft = -w / 2 + 30;
+  const ridgeRight = w / 2 - 30;
+  const sag = decayed ? ROOF_SAG : 0;
+  // Points along the ridge, from x = from to x = to
+  const ridge = (from, to) =>
+    Array.from({ length: 13 }, (_, i) => {
+      const x = from + ((to - from) * i) / 12;
+      return { x, y: roofTop + sag * Math.sin((Math.PI * (x - ridgeLeft)) / (ridgeRight - ridgeLeft)) };
+    });
+
+  g.fillStyle(colors.roofs[index % colors.roofs.length]);
+  g.fillPoints([{ x: -w / 2 - EAVE, y: -h }, { x: w / 2 + EAVE, y: -h }, ...ridge(ridgeRight, ridgeLeft)], true);
+  g.fillStyle(colors.shadow, 0.18);
   for (let y = roofTop + 34; y < -h; y += 34) g.fillRect(-w / 2 - 10, y, w + 20, 6);
-  g.fillStyle(COLORS.sunlight, 0.2);
-  g.fillPoints(
-    [
-      { x: w * 0.12, y: -h },
-      { x: w / 2 + EAVE, y: -h },
-      { x: w / 2 - 30, y: roofTop },
-      { x: w * 0.1, y: roofTop },
-    ],
-    true,
-  );
-  g.fillStyle(COLORS.shadow, 0.28);
+  g.fillStyle(colors.sunlight, 0.2);
+  g.fillPoints([{ x: w * 0.12, y: -h }, { x: w / 2 + EAVE, y: -h }, ...ridge(ridgeRight, w * 0.1)], true);
+  g.fillStyle(colors.shadow, 0.28);
   g.fillRect(-w / 2 - EAVE, -h - 12, w + 2 * EAVE, 12);
-  g.fillStyle(COLORS.sunlight, 0.35);
-  g.fillRect(-w / 2 + 30, roofTop, w - 60, 10);
+  if (decayed) {
+    // Gaps where tiles have slipped off
+    g.fillStyle(colors.shadow, 0.6);
+    for (const [x, y] of [[-0.24, 0.62], [0.08, 0.3], [-0.36, 0.22], [0.26, 0.7], [-0.04, 0.5]]) {
+      g.fillRect(x * w, -h - y * ROOF_HEIGHT, 28, 14);
+    }
+  } else {
+    g.fillStyle(colors.sunlight, 0.35);
+    g.fillRect(-w / 2 + 30, roofTop, w - 60, 10);
+  }
+}
 
-  g.fillStyle(COLORS.door);
-  g.fillRoundedRect(-32, -112, 64, 112, { tl: 30, tr: 30, bl: 0, br: 0 });
-  g.fillStyle(COLORS.windowLight);
+function drawFrontDoor(g, { colors, decayed }) {
+  if (decayed) {
+    // Weathered grey planks, split apart, and a knob that's lost its shine
+    g.fillStyle(colors.wood);
+    g.fillRoundedRect(-32, -112, 64, 112, { tl: 30, tr: 30, bl: 0, br: 0 });
+    g.lineStyle(3, colors.crack);
+    g.lineBetween(-11, -108, -11, 0);
+    g.lineBetween(11, -108, 11, 0);
+    g.strokePoints([
+      { x: -26, y: -40 },
+      { x: -18, y: -52 },
+      { x: -22, y: -64 },
+    ]);
+    g.fillStyle(colors.crack);
+  } else {
+    g.fillStyle(colors.door);
+    g.fillRoundedRect(-32, -112, 64, 112, { tl: 30, tr: 30, bl: 0, br: 0 });
+    g.fillStyle(colors.windowLight);
+  }
   g.fillCircle(18, -54, 5);
+}
 
-  // Glowing windows with green shutters
-  for (const x of [-w / 2 + 34, w / 2 - 84]) {
+// Two windows with green shutters. Restored, they glow with the light inside; drained,
+// they're dark, a pane is cracked, and a shutter on each hangs loose from one hinge.
+function drawWindows(g, w, h, { colors, decayed }) {
+  [-w / 2 + 34, w / 2 - 84].forEach((x, i) => {
     const y = -h + 46;
-    g.fillStyle(COLORS.windowLight, 0.25);
-    g.fillEllipse(x + 25, y + 26, 104, 88, 20);
-    g.fillStyle(COLORS.shutter);
-    g.fillRect(x - 18, y - 2, 14, 56);
-    g.fillRect(x + 54, y - 2, 14, 56);
-    g.fillStyle(COLORS.windowLight);
+    if (!decayed) {
+      g.fillStyle(colors.windowLight, 0.25);
+      g.fillEllipse(x + 25, y + 26, 104, 88, 20);
+    }
+    g.fillStyle(colors.shutter);
+    if (decayed && i === 0) fillSwung(g, x - 4, y - 2, -14, 56, 0.42);
+    else g.fillRect(x - 18, y - 2, 14, 56);
+    if (decayed && i === 1) fillSwung(g, x + 54, y - 2, 14, 56, -0.3);
+    else g.fillRect(x + 54, y - 2, 14, 56);
+    g.fillStyle(decayed ? colors.darkWindow : colors.windowLight);
     g.fillRect(x, y, 50, 52);
-    g.lineStyle(6, COLORS.frame);
+    if (decayed && i === 0) {
+      g.lineStyle(2, colors.sunlight, 0.8);
+      g.strokePoints([
+        { x: x + 3, y: y + 6 },
+        { x: x + 13, y: y + 18 },
+        { x: x + 9, y: y + 29 },
+        { x: x + 22, y: y + 44 },
+      ]);
+    }
+    g.lineStyle(6, colors.frame);
     g.strokeRect(x, y, 50, 52);
     g.lineBetween(x + 25, y, x + 25, y + 52);
-  }
+  });
+}
 
-  // Autumn ivy climbing the wall
-  if (index % 3 !== 1) drawIvy(g, -w / 2, random);
+// A board hanging from one corner (x, y): width and height reach out from that corner,
+// and the board is swung round it by angle (in radians; more than 0 swings it clockwise).
+function fillSwung(g, x, y, width, height, angle) {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const corner = (dx, dy) => ({ x: x + dx * cos - dy * sin, y: y + dx * sin + dy * cos });
+  g.fillPoints([corner(0, 0), corner(width, 0), corner(width, height), corner(0, height)], true);
+}
+
+// Drained ivy: dead grey strands hanging limp from the eave, down the left of the wall.
+function drawDeadIvy(g, wallLeft, wallTop, random, colors) {
+  for (let i = 0; i < 6; i++) {
+    const x = wallLeft + 2 + i * 9 + random() * 5;
+    const length = 40 + random() * 110;
+    g.lineStyle(3, colors.deadPlant);
+    g.lineBetween(x, wallTop, x + 3, wallTop + length);
+    g.fillStyle(colors.ivy[i % colors.ivy.length]);
+    for (let y = wallTop + 14, side = i % 2 ? 1 : -1; y < wallTop + length; y += 18, side = -side) {
+      const stemX = x + (3 * (y - wallTop)) / length;
+      // A leaf hanging down from the strand
+      g.fillTriangle(stemX, y - 4, stemX + side * 8, y, stemX + side * 3, y + 12);
+    }
+  }
 }
 
 function drawIvy(g, wallLeft, random) {
@@ -606,21 +848,53 @@ function drawLamp(g) {
   g.fillRect(-14, -172, 28, 6);
 }
 
-function drawBench(g) {
-  g.fillStyle(COLORS.shadow, 0.22);
+function drawBench(g, { colors, decayed }) {
+  g.fillStyle(colors.shadow, 0.22);
   g.fillEllipse(-20, 0, 190, 24, 16);
-  g.fillStyle(COLORS.woodDark);
+  g.fillStyle(colors.woodDark);
   g.fillRect(-70, -40, 10, 40);
   g.fillRect(60, -40, 10, 40);
   g.fillRect(-74, -88, 8, 44);
   g.fillRect(66, -88, 8, 44);
-  g.fillStyle(COLORS.wood);
-  g.fillRect(-80, -48, 160, 14);
-  g.fillRect(-80, -88, 160, 12);
+  g.fillStyle(colors.wood);
+  if (!decayed) {
+    g.fillRect(-80, -48, 160, 14);
+    g.fillRect(-80, -88, 160, 12);
+    g.fillRect(-80, -70, 160, 10);
+    g.fillStyle(colors.sunlight, 0.25);
+    g.fillRect(-80, -48, 160, 4);
+    g.fillRect(-80, -88, 160, 4);
+    return;
+  }
+  // Drained: the seat sags in the middle, the top of the back has snapped
+  // and hangs down from one end, and the grey wood is cracked
+  g.fillPoints(saggingPlank(-80, 80, -48, 14, 10), true);
   g.fillRect(-80, -70, 160, 10);
-  g.fillStyle(COLORS.sunlight, 0.25);
-  g.fillRect(-80, -48, 160, 4);
-  g.fillRect(-80, -88, 160, 4);
+  g.fillRect(-80, -88, 78, 12);
+  fillSwung(g, 80, -88, -76, 12, -0.3);
+  g.lineStyle(3, colors.crack);
+  g.strokePoints([
+    { x: -60, y: -42 },
+    { x: -42, y: -38 },
+    { x: -30, y: -41 },
+    { x: -12, y: -35 },
+  ]);
+  g.strokePoints([
+    { x: 20, y: -66 },
+    { x: 36, y: -63 },
+    { x: 50, y: -67 },
+  ]);
+}
+
+// The outline of a plank from left to right whose middle sags down by sag.
+function saggingPlank(left, right, top, thickness, sag) {
+  const along = (i, y) => {
+    const t = i / 8;
+    return { x: left + (right - left) * t, y: y + sag * Math.sin(Math.PI * t) };
+  };
+  const topEdge = Array.from({ length: 9 }, (_, i) => along(i, top));
+  const bottomEdge = Array.from({ length: 9 }, (_, i) => along(8 - i, top + thickness));
+  return [...topEdge, ...bottomEdge];
 }
 
 function drawRock(g, size) {

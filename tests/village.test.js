@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { buildWalkGrid, village, villageDoors } from '../src/village/layout.js';
+import { buildWalkGrid, restorableNames, village, villageDoors } from '../src/village/layout.js';
 import { isWalkable, toCell } from '../src/world/grid.js';
 import { planPath } from '../src/world/pathfinding.js';
 
@@ -49,5 +49,9 @@ describe('the village', () => {
     for (const { step } of villageDoors(village)) {
       expect(planPath(grid, village.start, step)?.at(-1)).toEqual(step);
     }
+  });
+
+  test("Nora and Meredith's house, one bench and one field have been drained of life, each saved by its own name", () => {
+    expect(restorableNames(village)).toEqual(['student-house', 'square-bench', 'west-field']);
   });
 });

@@ -17,9 +17,12 @@ const ROAD_Y = 1900;
 const ROAD_HALF_WIDTH = 80;
 const ROAD_TOP = ROAD_Y - ROAD_HALF_WIDTH;
 
+// Things marked `restorable` have had their life drained by the vampires: the game starts with
+// them decayed until the player restores them. The name is what the save remembers them by.
+
 const houses = [
-  // Along the road, doors facing it
-  { x: 600, baseY: 1640, width: 300, wall: 200 },
+  // Along the road, doors facing it. The first is the student house Meredith shares with Nora.
+  { x: 600, baseY: 1640, width: 300, wall: 200, restorable: 'student-house' },
   { x: 1350, baseY: 1600, width: 320, wall: 210 },
   { x: 2100, baseY: 1640, width: 280, wall: 190 },
   { x: 3900, baseY: 1620, width: 300, wall: 200 },
@@ -59,7 +62,7 @@ export const village = {
     { x: 2560, y: 2800, width: 1080, height: 80 }, // past the lower houses' doors
   ],
   fields: [
-    { x: 400, y: 2260, width: 700, height: 440 },
+    { x: 400, y: 2260, width: 700, height: 440, restorable: 'west-field' },
     { x: 1250, y: 2260, width: 690, height: 440 },
   ],
   // Fences around the fields, with a gate gap at the top
@@ -72,7 +75,7 @@ export const village = {
   ],
   trees: [...edgeTrees(), ...villageTrees()],
   benches: [
-    { x: 2720, y: 2130 },
+    { x: 2720, y: 2130, restorable: 'square-bench' },
     { x: 4800, y: 2390 },
   ],
   lamps: [
@@ -90,6 +93,11 @@ export const village = {
     { x: 5150, y: 1250, size: 30 },
   ],
 };
+
+// The names of everything in the village that has been drained of life.
+export function restorableNames(v = village) {
+  return [...v.houses, ...v.benches, ...v.fields].filter((thing) => thing.restorable).map((thing) => thing.restorable);
+}
 
 // The area a house covers on screen, from the bottom of its wall to the top of its roof.
 export function houseBounds(house) {

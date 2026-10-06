@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { save } from '../save.js';
 import { addSunsetLight, drawVillage } from '../village/drawVillage.js';
 import { buildWalkGrid, village, villageDoors } from '../village/layout.js';
 import { addBuildLabel } from './buildLabel.js';
@@ -16,7 +17,11 @@ export class VillageScene extends Phaser.Scene {
   create(data) {
     const grid = buildWalkGrid(village);
     const doors = villageDoors(village);
-    drawVillage(this, village);
+    this.restorables = drawVillage(this, village);
+    this.showLooks();
+    // A drained thing changes look as soon as the save changes (for now, from the ?debug switches)
+    const stopWatching = save.onChange(() => this.showLooks());
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, stopWatching);
     addSunsetLight(this);
 
     const start = Number.isInteger(data?.fromBuilding) ? doors[data.fromBuilding].step : village.start;
@@ -31,6 +36,14 @@ export class VillageScene extends Phaser.Scene {
     listenForTaps(this, this.walker, doors, (building) =>
       this.scene.start('House', { building, interior: doors[building].interior }),
     );
+  }
+
+  // Shows each drained thing the way the save has it: restored, or still decayed.
+  showLooks() {
+    for (const [name, { image, looks }] of Object.entries(this.restorables)) {
+      const look = save.isRestored(name) ? looks.restored : looks.decayed;
+      image.setTexture(look.key).setOrigin(look.originX, look.originY);
+    }
   }
 
   update(time, delta) {
