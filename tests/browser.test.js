@@ -20,8 +20,9 @@ let browser;
 beforeAll(async () => {
   await build({ logLevel: 'silent', build: { outDir, emptyOutDir: true } });
   server = await preview({ logLevel: 'silent', build: { outDir }, preview: { port: 4180, strictPort: false } });
-  // Google Chrome, as installed on this computer and on GitHub's build machines
-  browser = await chromium.launch({ channel: 'chrome' });
+  // Google Chrome, as installed on this computer and on GitHub's build machines. Without the
+  // graphics card, like on GitHub, so the game runs just as slowly here and timing problems show up.
+  browser = await chromium.launch({ channel: 'chrome', args: ['--disable-gpu'] });
 }, 120_000);
 
 afterAll(async () => {
@@ -68,11 +69,23 @@ async function tap(page, sceneKey, point) {
   await page.touchscreen.tap(x, y);
 }
 
+// Two taps stamped 120 ms apart, like a real finger. (Plain taps would queue up behind the
+// drawing when the page is busy, and arrive too far apart to count as a double tap.)
 async function doubleTap(page, sceneKey, point) {
   const { x, y } = await onScreen(page, sceneKey, point);
-  await page.touchscreen.tap(x, y);
-  await page.waitForTimeout(100);
-  await page.touchscreen.tap(x, y);
+  const cdp = await page.context().newCDPSession(page);
+  const start = Date.now() / 1000;
+  const touches = [
+    ['touchStart', 0],
+    ['touchEnd', 0.04],
+    ['touchStart', 0.12],
+    ['touchEnd', 0.16],
+  ];
+  for (const [type, delay] of touches) {
+    const touchPoints = type === 'touchStart' ? [{ x, y }] : [];
+    await cdp.send('Input.dispatchTouchEvent', { type, touchPoints, timestamp: start + delay });
+  }
+  await cdp.detach();
 }
 
 function activeScenes(page) {
@@ -85,6 +98,13 @@ function playerInVillage(page) {
     return { x: player.x, y: player.y };
   });
 }
+
+function isWalking(page, sceneKey) {
+  return page.evaluate((key) => window.cozy.game.scene.getScene(key).walker.waypoints.length > 0, sceneKey);
+}
+
+// Without a graphics card the game runs in slow motion, so allow plenty of time for walks and fades.
+const SLOW = { timeout: 30_000 };
 
 test('the whole game fits the screen after turning the tablet either way', async () => {
   const page = await openGame(UPRIGHT);
@@ -104,7 +124,7 @@ test('double-tapping the door you stand at takes you into the house, and back ou
 
   // From far away, a double tap on the door only walks there
   await doubleTap(page, 'Village', middleOfDoor);
-  await page.waitForTimeout(1500);
+  await expect.poll(() => isWalking(page, 'Village'), SLOW).toBe(false);
   expect(await activeScenes(page)).toBe('Village');
   expect(isNearDoor(await playerInVillage(page), door)).toBe(true);
 
@@ -115,11 +135,10 @@ test('double-tapping the door you stand at takes you into the house, and back ou
 
   // Standing at the door, a double tap goes in
   await doubleTap(page, 'Village', middleOfDoor);
-  await expect.poll(() => activeScenes(page), { timeout: 5000 }).toBe('House');
+  await expect.poll(() => activeScenes(page), SLOW).toBe('House');
 
   // Inside, a double tap on the room's door goes back out, in front of the same house
-  await page.waitForTimeout(500);
   await doubleTap(page, 'House', { x: roomDoor.step.x, y: roomDoor.area.bottom - 20 });
-  await expect.poll(() => activeScenes(page), { timeout: 5000 }).toBe('Village');
+  await expect.poll(() => activeScenes(page), SLOW).toBe('Village');
   expect(isNearDoor(await playerInVillage(page), door)).toBe(true);
-}, 60_000);
+}, 120_000);
