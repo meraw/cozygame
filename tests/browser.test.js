@@ -5,7 +5,7 @@ import { chromium } from 'playwright-core';
 import { build, preview } from 'vite';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 import { roomDoor } from '../src/house/room.js';
-import { houseDoors, village } from '../src/village/layout.js';
+import { houseDoors, village, villageDoors } from '../src/village/layout.js';
 import { isNearDoor } from '../src/world/doors.js';
 
 // These tests play the real game in Chrome, pretending to be an Android tablet with a touch screen.
@@ -100,12 +100,32 @@ function playerInVillage(page) {
   });
 }
 
-function isWalking(page, sceneKey) {
-  return page.evaluate((key) => window.cozy.game.scene.getScene(key).walker.waypoints.length > 0, sceneKey);
+function interiorShown(page) {
+  return page.evaluate(() => window.cozy.game.scene.getScene('House').interior);
 }
 
 // Without a graphics card the game runs in slow motion, so allow plenty of time for walks and fades.
 const SLOW = { timeout: 30_000 };
+
+// Waits until the player has stopped walking and the camera has caught up with her, so the
+// test's taps land where they're aimed (the camera glides after the player for a moment).
+async function waitUntilStill(page, sceneKey) {
+  const now = () =>
+    page.evaluate((key) => {
+      const scene = window.cozy.game.scene.getScene(key);
+      const { scrollX, scrollY } = scene.cameras.main;
+      return `${scene.walker.waypoints.length} ${Math.round(scrollX)},${Math.round(scrollY)}`;
+    }, sceneKey);
+  let last = await now();
+  await expect
+    .poll(async () => {
+      const current = await now();
+      const still = current === last && current.startsWith('0 ');
+      last = current;
+      return still;
+    }, { ...SLOW, interval: 200 })
+    .toBe(true);
+}
 
 test('the whole game fits the screen after turning the tablet either way', async () => {
   const page = await openGame(UPRIGHT);
@@ -125,7 +145,7 @@ test('double-tapping the door you stand at takes you into the house, and back ou
 
   // From far away, a double tap on the door only walks there
   await doubleTap(page, 'Village', middleOfDoor);
-  await expect.poll(() => isWalking(page, 'Village'), SLOW).toBe(false);
+  await waitUntilStill(page, 'Village');
   expect(await activeScenes(page)).toBe('Village');
   expect(isNearDoor(await playerInVillage(page), door)).toBe(true);
 
@@ -137,8 +157,30 @@ test('double-tapping the door you stand at takes you into the house, and back ou
   // Standing at the door, a double tap goes in
   await doubleTap(page, 'Village', middleOfDoor);
   await expect.poll(() => activeScenes(page), SLOW).toBe('House');
+  expect(await interiorShown(page)).toBe('room');
 
   // Inside, a double tap on the room's door goes back out, in front of the same house
+  await doubleTap(page, 'House', { x: roomDoor.step.x, y: roomDoor.area.bottom - 20 });
+  await expect.poll(() => activeScenes(page), SLOW).toBe('Village');
+  expect(isNearDoor(await playerInVillage(page), door)).toBe(true);
+}, 120_000);
+
+test("the town hall's door leads into the mayor's office", async () => {
+  const page = await openGame(SIDEWAYS);
+  const { townHall } = village;
+  const door = villageDoors(village).at(-1);
+  const middleOfDoor = { x: townHall.x, y: townHall.baseY - 80 };
+
+  // Walk along the road until the town hall is on screen, then up to its door
+  await tap(page, 'Village', { x: 2100, y: village.road.y });
+  await waitUntilStill(page, 'Village');
+  await tap(page, 'Village', middleOfDoor);
+  await waitUntilStill(page, 'Village');
+
+  await doubleTap(page, 'Village', middleOfDoor);
+  await expect.poll(() => activeScenes(page), SLOW).toBe('House');
+  expect(await interiorShown(page)).toBe('office');
+
   await doubleTap(page, 'House', { x: roomDoor.step.x, y: roomDoor.area.bottom - 20 });
   await expect.poll(() => activeScenes(page), SLOW).toBe('Village');
   expect(isNearDoor(await playerInVillage(page), door)).toBe(true);

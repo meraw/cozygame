@@ -106,6 +106,7 @@ export function townHallBounds(hall) {
 }
 
 // Every door in the village: the houses' in order, then the town hall's.
+// interior says what's inside: a plain room, or the mayor's office.
 export function villageDoors(v = village) {
   const hall = v.townHall;
   return [
@@ -113,6 +114,7 @@ export function villageDoors(v = village) {
     {
       area: { left: hall.x - 80, right: hall.x + 80, top: hall.baseY - 190, bottom: hall.baseY + 30 },
       step: { x: hall.x, y: hall.baseY + 60 },
+      interior: 'office',
     },
   ];
 }
@@ -122,6 +124,7 @@ export function houseDoors(houses) {
   return houses.map((house) => ({
     area: { left: house.x - 60, right: house.x + 60, top: house.baseY - 150, bottom: house.baseY + 30 },
     step: { x: house.x, y: house.baseY + 60 },
+    interior: 'room',
   }));
 }
 

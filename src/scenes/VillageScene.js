@@ -28,7 +28,9 @@ export class VillageScene extends Phaser.Scene {
     fadeIn(this);
 
     addBuildLabel(this);
-    listenForTaps(this, this.walker, doors, (building) => this.scene.start('House', { building }));
+    listenForTaps(this, this.walker, doors, (building) =>
+      this.scene.start('House', { building, interior: doors[building].interior }),
+    );
   }
 
   update(time, delta) {

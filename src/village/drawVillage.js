@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { makePicture, place } from '../pictures.js';
+import { seededRandom } from '../seededRandom.js';
 import { EAVE, ROOF_HEIGHT, TOWN_HALL } from './layout.js';
 
 // Colors measured from references/mood/Borgo d'autunno al tramonto.png: an autumn village
@@ -149,23 +151,6 @@ export function addSunsetLight(scene) {
     .setDisplaySize(width, height)
     .setScrollFactor(0)
     .setDepth(LIGHT_DEPTH);
-}
-
-// Draws once into a texture, so the game doesn't redraw every shape on every frame.
-// (anchorX, anchorY) is the point of the picture that sits on the ground.
-function makePicture(scene, key, width, height, anchorX, anchorY, draw) {
-  if (!scene.textures.exists(key)) {
-    const g = scene.make.graphics({}, false);
-    g.translateCanvas(anchorX, anchorY);
-    draw(g);
-    g.generateTexture(key, width, height);
-    g.destroy();
-  }
-  return { key, originX: anchorX / width, originY: anchorY / height };
-}
-
-function place(scene, picture, x, y, scale = 1) {
-  return scene.add.image(x, y, picture.key).setOrigin(picture.originX, picture.originY).setScale(scale).setDepth(y);
 }
 
 function drawBackdrop(g, v) {
@@ -686,15 +671,4 @@ function drawFountain(g, radius) {
   g.fillCircle(0, -130, 14);
   g.fillCircle(-26, -100, 8);
   g.fillCircle(26, -100, 8);
-}
-
-// The same "random" numbers every time, so the village always looks the same.
-function seededRandom(seed) {
-  let state = seed;
-  return () => {
-    state = (state + 0x6d2b79f5) | 0;
-    let t = Math.imul(state ^ (state >>> 15), 1 | state);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 }
