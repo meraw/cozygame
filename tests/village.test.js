@@ -51,7 +51,40 @@ describe('the village', () => {
     }
   });
 
-  test("Nora and Meredith's house, one bench and one field have been drained of life, each saved by its own name", () => {
-    expect(restorableNames(village)).toEqual(['student-house', 'square-bench', 'west-field']);
+  test("Nora and Meredith's house, one bench, one field and the roundabout have been drained of life, each saved by its own name", () => {
+    expect(restorableNames(village)).toEqual(['student-house', 'square-bench', 'west-field', 'roundabout']);
+  });
+});
+
+describe('the roundabout', () => {
+  const { roundabout, square } = village;
+
+  test('stands in the middle of the square, instead of the fountain', () => {
+    expect(roundabout).toMatchObject({ x: square.x, y: square.y });
+    expect(roundabout.radius).toBeLessThan(square.radius - 100);
+    expect(village.fountain).toBeUndefined();
+  });
+
+  test('can be walked all the way round, but not across', () => {
+    const around = [0, 1, 2, 3].map((quarter) => {
+      const angle = (quarter * Math.PI) / 2;
+      const distance = roundabout.radius + 75;
+      return { x: roundabout.x + Math.cos(angle) * distance, y: roundabout.y + Math.sin(angle) * distance };
+    });
+    for (const spot of around) {
+      const cell = toCell(grid, spot);
+      expect(isWalkable(grid, cell.col, cell.row)).toBe(true);
+      expect(planPath(grid, village.start, spot)?.at(-1)).toEqual(spot);
+    }
+    const middle = toCell(grid, roundabout);
+    expect(isWalkable(grid, middle.col, middle.row)).toBe(false);
+  });
+
+  test('says LEIRA, in letters that fit inside its kerb', () => {
+    const { text, letterWidth, gap, baseline } = roundabout.sign;
+    expect(text).toBe('LEIRA');
+    const width = text.length * letterWidth + (text.length - 1) * gap;
+    const roomAtBaseline = 2 * Math.sqrt(roundabout.radius ** 2 - baseline ** 2);
+    expect(width).toBeLessThan(roomAtBaseline - 30);
   });
 });

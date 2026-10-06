@@ -77,7 +77,7 @@ describe('the town hall', () => {
     }
   });
 
-  test('stands on the north side of the square, its door facing the fountain', () => {
+  test('stands on the north side of the square, its door facing the roundabout', () => {
     const squareTop = square.y - square.radius;
     expect(townHall.x).toBe(square.x);
     expect(townHall.baseY).toBeLessThan(squareTop);

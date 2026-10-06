@@ -36,7 +36,7 @@ const houses = [
   { x: 3500, baseY: 2800, width: 320, wall: 200 },
 ];
 
-// On the north side of the square, its door facing the fountain
+// On the north side of the square, its door facing the roundabout
 const townHall = { x: 3000, baseY: 1440, width: 600, wall: 280 };
 
 export const village = {
@@ -49,7 +49,17 @@ export const village = {
   hillsBottom: 560,
   road: { y: ROAD_Y, halfWidth: ROAD_HALF_WIDTH },
   square: { x: 3000, y: ROAD_Y, radius: 380 },
-  fountain: { x: 3000, y: ROAD_Y, radius: 110 },
+  // In the middle of the square, a roundabout after references/Rotonda Decorata.png: clipped
+  // hedges, and the village's name along the front in big steel letters full of white pebbles.
+  // The sign's sizes: each letter, the gap between them, and how far in front of the middle
+  // they stand.
+  roundabout: {
+    x: 3000,
+    y: ROAD_Y,
+    radius: 240,
+    sign: { text: 'LEIRA', letterWidth: 64, letterHeight: 92, gap: 10, baseline: 125 },
+    restorable: 'roundabout',
+  },
   pond: { x: 4800, y: 2700, radiusX: 520, radiusY: 230 },
   houses,
   townHall,
@@ -77,7 +87,7 @@ export const village = {
   ],
   trees: [...edgeTrees(), ...villageTrees()],
   benches: [
-    { x: 2720, y: 2130, restorable: 'square-bench' },
+    { x: 2640, y: 2150, restorable: 'square-bench' },
     { x: 4800, y: 2390 },
   ],
   lamps: [
@@ -98,7 +108,9 @@ export const village = {
 
 // The names of everything in the village that has been drained of life.
 export function restorableNames(v = village) {
-  return [...v.houses, ...v.benches, ...v.fields].filter((thing) => thing.restorable).map((thing) => thing.restorable);
+  return [...v.houses, ...v.benches, ...v.fields, v.roundabout]
+    .filter((thing) => thing.restorable)
+    .map((thing) => thing.restorable);
 }
 
 // The area a house covers on screen, from the bottom of its wall to the top of its roof.
@@ -161,7 +173,7 @@ export function buildWalkGrid(v = village) {
   for (const bench of v.benches) solidRect(bench.x - 80, bench.y - 40, 160, 40);
   for (const lamp of v.lamps) solidEllipse(lamp.x, lamp.y, 14, 10);
   for (const rock of v.rocks) solidEllipse(rock.x, rock.y, rock.size, rock.size * 0.6);
-  solidEllipse(v.fountain.x, v.fountain.y, v.fountain.radius, v.fountain.radius);
+  solidEllipse(v.roundabout.x, v.roundabout.y, v.roundabout.radius, v.roundabout.radius);
   solidEllipse(v.pond.x, v.pond.y, v.pond.radiusX, v.pond.radiusY);
   return grid;
 }
