@@ -10,6 +10,7 @@ export const COLORS = {
   hills: [0xc4a59c, 0xa98d88, 0x9a7a5c],
   hillTown: 0x8c726c,
   mist: 0xf6d9b8,
+  morningMist: 0xeef3f7,
   orchard: [0xb8692e, 0xc98a3a],
   hedge: 0x6b5a2a,
   grass: 0xa48c44,
@@ -34,6 +35,9 @@ export const COLORS = {
   smoke: 0xf3e6d6,
   door: 0x5a3018,
   windowLight: 0xf6b94f,
+  // Window glass by day, with the sky in it
+  glass: 0x9fb2bb,
+  glassShine: 0xe9f0f2,
   frame: 0x5a3a22,
   shutter: 0x66704c,
   townHallWall: 0xd6a86a,

@@ -1,6 +1,9 @@
 // The player's progress, kept in the browser's storage (localStorage) so it's still there the
-// next time the game opens on the same tablet: which drained things have been restored, and
-// how much life energy Meredith has harvested. Everything else starts as in a new game.
+// next time the game opens on the same tablet: which drained things have been restored, how
+// much life energy Meredith has harvested, and the time of day. Everything else starts as in a
+// new game.
+
+import { PHASES } from './world/dayCycle.js';
 
 export const SAVE_KEY = 'cozygame-save';
 
@@ -12,6 +15,8 @@ export class SaveGame {
     const saved = readSave(storage);
     this.restored = new Set(saved.restored);
     this.lifeEnergy = saved.lifeEnergy;
+    // The part of the day, and how many seconds into it
+    this.dayTime = saved.dayTime;
     this.listeners = new Set();
   }
 
@@ -40,6 +45,12 @@ export class SaveGame {
     return true;
   }
 
+  // Saves the time of day. It's saved every few seconds, so nothing listening is told.
+  setDayTime(phase, elapsed) {
+    this.dayTime = { phase, elapsed };
+    this.write();
+  }
+
   // Calls listener after every change. Returns a function that stops it.
   onChange(listener) {
     this.listeners.add(listener);
@@ -47,12 +58,18 @@ export class SaveGame {
   }
 
   changed() {
+    this.write();
+    for (const listener of this.listeners) listener();
+  }
+
+  write() {
+    const { restored, lifeEnergy, dayTime } = this;
+    const data = { restored: [...restored], lifeEnergy, dayPhase: dayTime.phase, phaseElapsed: dayTime.elapsed };
     try {
-      this.storage?.setItem(SAVE_KEY, JSON.stringify({ restored: [...this.restored], lifeEnergy: this.lifeEnergy }));
+      this.storage?.setItem(SAVE_KEY, JSON.stringify(data));
     } catch {
       // The browser won't keep it (full, or private browsing): keep playing without saving.
     }
-    for (const listener of this.listeners) listener();
   }
 }
 
@@ -67,7 +84,11 @@ function readSave(storage) {
   const restored = Array.isArray(saved?.restored) ? saved.restored.filter((name) => typeof name === 'string') : [];
   const energy = saved?.lifeEnergy;
   const lifeEnergy = Number.isFinite(energy) && energy >= 0 ? Math.floor(energy) : 0;
-  return { restored, lifeEnergy };
+  const phase = saved?.dayPhase;
+  const elapsed = saved?.phaseElapsed;
+  const dayTime =
+    PHASES.includes(phase) && Number.isFinite(elapsed) && elapsed >= 0 ? { phase, elapsed } : { phase: 'morning', elapsed: 0 };
+  return { restored, lifeEnergy, dayTime };
 }
 
 function browserStorage() {

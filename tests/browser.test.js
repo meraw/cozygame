@@ -5,6 +5,7 @@ import { chromium } from 'playwright-core';
 import { build, preview } from 'vite';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 import mayorFile from '../dialogue/mayor.txt?raw';
+import settingsFile from '../settings.txt?raw';
 import { office } from '../src/house/office.js';
 import { roomDoor } from '../src/house/room.js';
 import { SAVE_KEY } from '../src/save.js';
@@ -13,6 +14,7 @@ import { houseDoors, restorableNames, village, villageDoors } from '../src/villa
 import { parseDialogue } from '../src/world/conversation.js';
 import { isNearDoor } from '../src/world/doors.js';
 import { HARVEST_REACH, LIFE_ENERGY_PER_HARVEST } from '../src/world/harvest.js';
+import { parseSettings } from '../src/world/settings.js';
 
 // These tests play the real game in Chrome, pretending to be an Android tablet with a touch screen.
 // An Android tablet's screen, held upright and sideways (sideways loses some height to the browser bar).
@@ -51,11 +53,19 @@ function waitForVillage(page) {
   return page.waitForFunction(() => window.cozy?.game.scene.isActive('Village'), null, { timeout: 15_000 });
 }
 
-// Opens the game with something already in the save, as if it had been played before.
+// Opens the game with something already in the save, as if it had been played before. It's put
+// in place once, before the game starts: reloading the page keeps whatever the game saved since.
 async function openGameWithSave(viewport, saved) {
-  const page = await openGame(viewport);
-  await page.evaluate(([key, data]) => localStorage.setItem(key, JSON.stringify(data)), [SAVE_KEY, saved]);
-  await page.reload();
+  const page = await browser.newPage({ viewport, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await page.addInitScript(
+    ([key, data]) => {
+      if (sessionStorage.getItem('test-save-placed')) return;
+      localStorage.setItem(key, JSON.stringify(data));
+      sessionStorage.setItem('test-save-placed', 'yes');
+    },
+    [SAVE_KEY, saved],
+  );
+  await page.goto(`${server.resolvedUrls.local[0]}?debug`);
   await waitForVillage(page);
   return page;
 }
@@ -222,6 +232,40 @@ test('the drained things start decayed, and one restored stays restored after re
   await page.reload();
   await waitForVillage(page);
   expect(await looks(page)).toEqual(houseRestored);
+}, 60_000);
+
+// The part of the day on the game clock, and how dark the village's night shade is right now.
+function dayInVillage(page) {
+  return page.evaluate(() => {
+    const { clock, game } = window.cozy;
+    const { daylight } = game.scene.getScene('Village');
+    return { phase: clock.phase, darkness: daylight.darkness.alpha, lights: daylight.lightsOn };
+  });
+}
+
+test('the game clock runs on the lengths written in settings.txt, starting in the morning', async () => {
+  const page = await openGame(SIDEWAYS);
+  const lengths = await page.evaluate(() => window.cozy.clock.lengths);
+  expect(lengths).toEqual(parseSettings(settingsFile).day);
+  expect((await dayInVillage(page)).phase).toBe('morning');
+}, 60_000);
+
+test('the hidden skip button moves the day on, the village follows, and it is still that time after reloading', async () => {
+  const page = await openGame(SIDEWAYS);
+  const skip = page.getByRole('button', { name: /^day:/ });
+
+  await skip.tap();
+  await expect.poll(async () => (await dayInVillage(page)).phase).toBe('afternoon');
+  await skip.tap();
+  await skip.tap();
+  await expect.poll(async () => (await dayInVillage(page)).phase).toBe('night');
+  // After the quick fade, the village is in the dark with its lights on
+  await expect.poll(async () => (await dayInVillage(page)).darkness, SLOW).toBeGreaterThan(0.5);
+  expect((await dayInVillage(page)).lights).toBe(true);
+
+  await page.reload();
+  await waitForVillage(page);
+  expect((await dayInVillage(page)).phase).toBe('night');
 }, 60_000);
 
 test('with enough life energy, tapping the drained house restores it and spends the energy, still so after reloading', async () => {

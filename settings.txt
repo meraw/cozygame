@@ -1,0 +1,19 @@
+# Game settings you can change. After you change something here (on GitHub too), the live game
+# uses it once it has rebuilt (about 2 minutes later) and you reload the page.
+# Lines starting with # are notes. Each setting is its name, a colon, and its value.
+
+# The day: how many minutes each part of it lasts (0.5 is half a minute)
+morning minutes: 5
+afternoon minutes: 5
+evening minutes: 5
+night minutes: 5
+
+# How many seconds the light takes to change from one part of the day to the next
+fade seconds: 20
+
+# Music for each part of the day: the name of a file you've put in the public/music folder,
+# like  morning music: birds.mp3  Leave it empty for silence.
+morning music:
+afternoon music:
+evening music:
+night music:

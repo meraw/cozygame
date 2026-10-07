@@ -8,6 +8,13 @@ import { COLORS, DECAYED, RESTORED } from './palette.js';
 const GROUND_DEPTH = -100000;
 // Fields lie flat: above the ground, but under everything that stands up
 const FIELD_DEPTH = GROUND_DEPTH + 1;
+// Long afternoon shadows fall on the ground and the fields
+const SHADOWS_DEPTH = GROUND_DEPTH + 2;
+// Morning mist floats over everything in the world
+const MIST_DEPTH = 3e8;
+// The town hall's tall windows: where each stands across its front, and its size from the top of the wall
+const TOWN_HALL_WINDOWS = [-226, -130, 130, 226];
+const TOWN_HALL_WINDOW = { top: 60, height: 130 };
 const LIGHT_DEPTH = 5e8;
 const FENCE_STEP = 80;
 // How far a house's picture reaches in front of its wall: room for the flowers by its door
@@ -20,12 +27,19 @@ const TREE_KINDS = ['orange', 'gold', 'rust', 'orange', 'cypress', 'gold', 'oran
 // Draws the whole village. The flat ground is one drawing under everything; anything that
 // stands up (houses, trees...) is its own picture, layered by how far down the screen its
 // base is, so the player walks behind things above them and in front of things below.
-// Returns the drained things (marked restorable in the layout) by name: the picture showing
-// each one and both of its looks, so the scene can show the look the save calls for.
+// Returns:
+//   restorables: the drained things (marked restorable in the layout) by name: the picture
+//     showing each one and both of its looks, so the scene can show the look the save calls for
+//   light: what changes through the day: the lit windows and lampposts (each with the spots it
+//     lights up at night, and the drained thing it belongs to, if any), the morning mist and
+//     the long afternoon shadows
 export function drawVillage(scene, village) {
   const ground = scene.add.graphics().setDepth(GROUND_DEPTH);
   drawBackdrop(ground, village);
   drawGround(ground, village);
+  const lights = [];
+  const shadows = scene.add.graphics().setDepth(SHADOWS_DEPTH);
+  drawLongShadows(shadows, village);
 
   const restorables = {};
   // Places a thing drawn by picture(look). For a drained thing, both of its looks are drawn.
@@ -54,15 +68,28 @@ export function drawVillage(scene, village) {
         drawHouse(g, house, i, look),
       );
     placeThing(house, picture, house.x, house.baseY);
+
+    // Its windows lit, laid over the house when the lights come on
+    const lit = makePicture(scene, `house-${i}-lights`, width, height, width / 2, height - HOUSE_FRONT, (g) =>
+      drawHouseLights(g, house),
+    );
+    lights.push({
+      image: place(scene, lit, house.x, house.baseY).setDepth(house.baseY + 0.5),
+      restorable: house.restorable,
+      glows: houseWindows(house).map(({ x, y }) => ({ x: house.x + x + 25, y: house.baseY + y + 26, radius: 120 })),
+    });
   });
 
   const hall = village.townHall;
   const hallWidth = hall.width + 2 * EAVE + 200;
   const hallHeight = hall.wall + TOWN_HALL.towerHeight + TOWN_HALL.towerRoof + 140;
-  const hallPicture = makePicture(scene, 'town-hall', hallWidth, hallHeight, hallWidth / 2, hallHeight - 40, (g) =>
-    drawTownHall(g, hall),
-  );
-  place(scene, hallPicture, hall.x, hall.baseY);
+  const hallPicture = (draw, key) =>
+    makePicture(scene, key, hallWidth, hallHeight, hallWidth / 2, hallHeight - 40, (g) => draw(g, hall));
+  place(scene, hallPicture(drawTownHall, 'town-hall'), hall.x, hall.baseY);
+  lights.push({
+    image: place(scene, hallPicture(drawTownHallLights, 'town-hall-lights'), hall.x, hall.baseY).setDepth(hall.baseY + 0.5),
+    glows: TOWN_HALL_WINDOWS.map((x) => ({ x: hall.x + x, y: hall.baseY - hall.wall + 125, radius: 130 })),
+  });
 
   const trees = { cypress: makePicture(scene, 'tree-cypress', 140, 380, 70, 360, drawCypress) };
   for (const [kind, color] of Object.entries(COLORS.foliage)) {
@@ -71,7 +98,14 @@ export function drawVillage(scene, village) {
   village.trees.forEach((tree, i) => place(scene, trees[TREE_KINDS[i % TREE_KINDS.length]], tree.x, tree.y, tree.size));
 
   const lamp = makePicture(scene, 'lamp', 150, 290, 75, 270, drawLamp);
-  village.lamps.forEach((spot) => place(scene, lamp, spot.x, spot.y));
+  const lampLit = makePicture(scene, 'lamp-light', 150, 290, 75, 270, drawLampLight);
+  for (const spot of village.lamps) {
+    place(scene, lamp, spot.x, spot.y);
+    lights.push({
+      image: place(scene, lampLit, spot.x, spot.y).setDepth(spot.y + 0.5),
+      glows: [{ x: spot.x, y: spot.y - 186, radius: 190 }],
+    });
+  }
 
   const bench = (look) => makePicture(scene, lookKey('bench', look), 230, 110, 125, 100, (g) => drawBench(g, look));
   for (const spot of village.benches) placeThing(spot, bench, spot.x, spot.y);
@@ -102,7 +136,12 @@ export function drawVillage(scene, village) {
     );
   placeThing(roundabout, roundaboutPicture, roundabout.x, roundabout.y);
 
-  return restorables;
+  const mist = scene.add.graphics().setDepth(MIST_DEPTH);
+  drawMist(mist, village);
+  // Drifting slowly
+  scene.tweens.add({ targets: mist, x: 90, duration: 14000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+
+  return { restorables, light: { lights, mist, shadows } };
 }
 
 // Each look of a thing is a picture of its own.
@@ -110,7 +149,46 @@ function lookKey(key, look) {
   return look.decayed ? `${key}-decayed` : key;
 }
 
-// The golden haze of the low sun (top right) and slightly darker edges, laid over the whole screen.
+// Long shadows on the ground, stretching left from everything that stands up, away from the
+// low afternoon sun on the right.
+function drawLongShadows(g, v) {
+  g.fillStyle(COLORS.shadow, 0.28);
+  for (const house of v.houses) {
+    const width = house.width + 2 * EAVE;
+    const length = (house.wall + ROOF_HEIGHT) * 1.6;
+    g.fillEllipse(house.x - length / 2, house.baseY + 6, width + length, 70, 32);
+  }
+  const hall = v.townHall;
+  const hallLength = (hall.wall + TOWN_HALL.towerHeight) * 1.4;
+  g.fillEllipse(hall.x - hallLength / 2, hall.baseY + 8, hall.width + hallLength, 100, 32);
+  for (const tree of v.trees) {
+    const length = 300 * tree.size * 1.7;
+    g.fillEllipse(tree.x - length / 2, tree.y + 4, length + 70, 44 * tree.size, 24);
+  }
+  for (const lamp of v.lamps) g.fillEllipse(lamp.x - 230, lamp.y + 2, 470, 16, 16);
+  for (const bench of v.benches) g.fillEllipse(bench.x - 150, bench.y + 2, 360, 26, 16);
+  const { roundabout: r } = v;
+  g.fillEllipse(r.x - 180, r.y + 20, 2 * r.radius + 260, r.radius * 1.4, 32);
+}
+
+// Soft banks of mist lying over the village, thickest over the fields at the bottom.
+function drawMist(g, v) {
+  const random = seededRandom(61);
+  for (let i = 0; i < 18; i++) {
+    const x = random() * v.width;
+    const y = v.hillsBottom + Math.sqrt(random()) * (v.height - v.hillsBottom);
+    const width = 800 + random() * 900;
+    const height = 150 + random() * 130;
+    for (let layer = 0; layer < 5; layer++) {
+      const size = 1 - layer * 0.16;
+      g.fillStyle(COLORS.morningMist, 0.12);
+      g.fillEllipse(x, y, width * size, height * size, 32);
+    }
+  }
+}
+
+// The golden haze of the low sun (top right) and slightly darker edges, laid over the whole
+// screen. Returns it, so the time of day can turn it up or down.
 export function addSunsetLight(scene) {
   const { width, height } = scene.scale;
   if (!scene.textures.exists('sunset-light')) {
@@ -131,7 +209,7 @@ export function addSunsetLight(scene) {
     ctx.fillRect(0, 0, w, h);
     texture.refresh();
   }
-  scene.add
+  return scene.add
     .image(0, 0, 'sunset-light')
     .setOrigin(0)
     .setDisplaySize(width, height)
@@ -503,22 +581,29 @@ function drawFrontDoor(g, { colors, decayed }) {
   g.fillCircle(18, -54, 5);
 }
 
-// Two windows with green shutters. Restored, they glow with the light inside; drained,
-// they're dark, a pane is cracked, and a shutter on each hangs loose from one hinge.
+// Where a house's two windows are (the top left corner of each pane), from the middle of the
+// bottom of its wall, given its width and wall height.
+function windowSpots(w, h) {
+  return [-w / 2 + 34, w / 2 - 84].map((x) => ({ x, y: -h + 46 }));
+}
+
+function houseWindows(house) {
+  return windowSpots(house.width, house.wall);
+}
+
+// Two windows with green shutters. Restored, their glass catches the sky (they light up in the
+// evening: see drawHouseLights); drained, they're dark, a pane is cracked, and a shutter on each
+// hangs loose from one hinge.
 function drawWindows(g, w, h, { colors, decayed }) {
-  [-w / 2 + 34, w / 2 - 84].forEach((x, i) => {
-    const y = -h + 46;
-    if (!decayed) {
-      g.fillStyle(colors.windowLight, 0.25);
-      g.fillEllipse(x + 25, y + 26, 104, 88, 20);
-    }
+  windowSpots(w, h).forEach(({ x, y }, i) => {
     g.fillStyle(colors.shutter);
     if (decayed && i === 0) fillSwung(g, x - 4, y - 2, -14, 56, 0.42);
     else g.fillRect(x - 18, y - 2, 14, 56);
     if (decayed && i === 1) fillSwung(g, x + 54, y - 2, 14, 56, -0.3);
     else g.fillRect(x + 54, y - 2, 14, 56);
-    g.fillStyle(decayed ? colors.darkWindow : colors.windowLight);
+    g.fillStyle(decayed ? colors.darkWindow : colors.glass);
     g.fillRect(x, y, 50, 52);
+    if (!decayed) drawGlassShine(g, x, y, 50, 52, colors);
     if (decayed && i === 0) {
       g.lineStyle(2, colors.sunlight, 0.8);
       g.strokePoints([
@@ -532,6 +617,33 @@ function drawWindows(g, w, h, { colors, decayed }) {
     g.strokeRect(x, y, 50, 52);
     g.lineBetween(x + 25, y, x + 25, y + 52);
   });
+}
+
+// A slanting streak of reflected sky across a window pane.
+function drawGlassShine(g, x, y, width, height, colors) {
+  g.fillStyle(colors.glassShine, 0.55);
+  g.fillPoints(
+    [
+      { x: x + width * 0.1, y: y + height },
+      { x: x + width * 0.35, y: y + height },
+      { x: x + width * 0.9, y },
+      { x: x + width * 0.65, y },
+    ],
+    true,
+  );
+}
+
+// A house's windows with the lights on inside, glowing: laid over the house in the evening.
+function drawHouseLights(g, house) {
+  for (const { x, y } of houseWindows(house)) {
+    g.fillStyle(COLORS.windowLight, 0.25);
+    g.fillEllipse(x + 25, y + 26, 104, 88, 20);
+    g.fillStyle(COLORS.windowLight);
+    g.fillRect(x, y, 50, 52);
+    g.lineStyle(6, COLORS.frame);
+    g.strokeRect(x, y, 50, 52);
+    g.lineBetween(x + 25, y, x + 25, y + 52);
+  }
 }
 
 // A board hanging from one corner (x, y): width and height reach out from that corner,
@@ -683,26 +795,43 @@ function drawTownHall(g, hall) {
   g.fillStyle(COLORS.stoneDark);
   g.fillRect(-112, 8, 224, 14);
 
-  // Tall arched windows with green shutters and flower boxes, two on each side of the door
-  for (const x of [-226, -130, 130, 226]) {
-    const top = -h + 60;
-    const height = 130;
-    g.fillStyle(COLORS.windowLight, 0.25);
-    g.fillEllipse(x, top + height / 2, 110, 170, 20);
+  // Tall arched windows with green shutters and flower boxes, two on each side of the door; their
+  // glass catches the sky (they light up in the evening: see drawTownHallLights)
+  const top = -h + TOWN_HALL_WINDOW.top;
+  const { height } = TOWN_HALL_WINDOW;
+  for (const x of TOWN_HALL_WINDOWS) {
     g.fillStyle(COLORS.shutter);
     g.fillRect(x - 44, top, 16, height);
     g.fillRect(x + 28, top, 16, height);
-    g.fillStyle(COLORS.windowLight);
+    g.fillStyle(COLORS.glass);
     g.fillRoundedRect(x - 26, top, 52, height, { tl: 26, tr: 26, bl: 0, br: 0 });
-    g.lineStyle(5, COLORS.frame);
-    g.lineBetween(x, top + 10, x, top + height);
-    g.lineBetween(x - 26, top + 60, x + 26, top + 60);
+    drawGlassShine(g, x - 20, top + 30, 40, height - 30, COLORS);
+    drawTownHallWindowFrame(g, x, top, height);
     g.fillStyle(COLORS.wood);
     g.fillRect(x - 32, top + height, 64, 14);
     for (let i = 0; i < 5; i++) {
       g.fillStyle(COLORS.flowers[i % COLORS.flowers.length]);
       g.fillEllipse(x - 24 + i * 12, top + height - 2, 12, 10, 8);
     }
+  }
+}
+
+function drawTownHallWindowFrame(g, x, top, height) {
+  g.lineStyle(5, COLORS.frame);
+  g.lineBetween(x, top + 10, x, top + height);
+  g.lineBetween(x - 26, top + 60, x + 26, top + 60);
+}
+
+// The town hall's windows with the lights on inside, glowing: laid over it in the evening.
+function drawTownHallLights(g, hall) {
+  const top = -hall.wall + TOWN_HALL_WINDOW.top;
+  const { height } = TOWN_HALL_WINDOW;
+  for (const x of TOWN_HALL_WINDOWS) {
+    g.fillStyle(COLORS.windowLight, 0.25);
+    g.fillEllipse(x, top + height / 2, 110, 170, 20);
+    g.fillStyle(COLORS.windowLight);
+    g.fillRoundedRect(x - 26, top, 52, height - 2, { tl: 26, tr: 26, bl: 0, br: 0 });
+    drawTownHallWindowFrame(g, x, top, height - 2);
   }
 }
 
@@ -747,18 +876,30 @@ function drawCypress(g) {
   g.fillEllipse(18, -170, 30, 200, 16);
 }
 
+// A lamppost, its lamp off (it comes on in the evening: see drawLampLight).
 function drawLamp(g) {
   g.fillStyle(COLORS.shadow, 0.22);
   g.fillEllipse(-14, 0, 60, 16, 12);
+  g.fillStyle(COLORS.lampPost);
+  g.fillRect(-6, -170, 12, 170);
+  g.fillRect(-14, -12, 28, 12);
+  g.fillStyle(COLORS.glass);
+  g.fillRect(-12, -200, 24, 30);
+  drawLampCaps(g);
+}
+
+// The lamp lit and glowing: laid over the lamppost in the evening.
+function drawLampLight(g) {
   g.fillStyle(COLORS.lampGlow, 0.18);
   g.fillCircle(0, -186, 64);
   g.fillStyle(COLORS.lampGlow, 0.3);
   g.fillCircle(0, -186, 38);
-  g.fillStyle(COLORS.lampPost);
-  g.fillRect(-6, -170, 12, 170);
-  g.fillRect(-14, -12, 28, 12);
   g.fillStyle(COLORS.windowLight);
   g.fillRect(-12, -200, 24, 30);
+  drawLampCaps(g);
+}
+
+function drawLampCaps(g) {
   g.fillStyle(COLORS.lampPost);
   g.fillRect(-16, -206, 32, 8);
   g.fillRect(-14, -172, 28, 6);

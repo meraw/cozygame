@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
+import { clock } from '../clock.js';
 import { save } from '../save.js';
+import { Daylight } from '../village/daylight.js';
 import { addSunsetLight, drawVillage } from '../village/drawVillage.js';
 import { buildWalkGrid, restorableAt, village, villageDoors } from '../village/layout.js';
 import { Villager } from '../village/villager.js';
@@ -22,13 +24,18 @@ export class VillageScene extends Phaser.Scene {
   create(data) {
     const grid = buildWalkGrid(village);
     const doors = villageDoors(village);
-    this.restorables = drawVillage(this, village);
+    const { restorables, light } = drawVillage(this, village);
+    this.restorables = restorables;
+    this.daylight = new Daylight(this, village, { ...light, haze: addSunsetLight(this) });
+    this.daylight.apply(clock.look());
     this.showLooks();
-    // A drained thing changes look as soon as the save changes: restored by a tap, or by the
-    // ?debug switches
-    const stopWatching = save.onChange(() => this.showLooks());
+    // A drained thing changes look as soon as the save changes (restored by a tap, or by the
+    // ?debug switches), and once restored, its lights can come on at night
+    const stopWatching = save.onChange(() => {
+      this.showLooks();
+      this.daylight.drawDarkness();
+    });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, stopWatching);
-    addSunsetLight(this);
 
     const start = Number.isInteger(data?.fromBuilding) ? doors[data.fromBuilding].step : village.start;
     this.walker = new Walker(this, grid, start, { markerColor: MARKER_COLOR });
@@ -80,5 +87,7 @@ export class VillageScene extends Phaser.Scene {
   update(time, delta) {
     this.walker.update(delta);
     this.villager.update(delta, this.walker.player);
+    // The light follows the game clock, which runs in every scene
+    this.daylight.apply(clock.look());
   }
 }

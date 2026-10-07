@@ -107,6 +107,34 @@ describe('the save', () => {
     expect(save.lifeEnergy).toBe(0);
   });
 
+  test('a new game starts at the beginning of the morning', () => {
+    expect(new SaveGame(fakeStorage()).dayTime).toEqual({ phase: 'morning', elapsed: 0 });
+  });
+
+  test('the part of the day, and how far into it, is remembered the next time the game opens', () => {
+    const storage = fakeStorage();
+    const save = new SaveGame(storage);
+    save.addLifeEnergy(10);
+    save.setDayTime('evening', 42.5);
+    const reopened = new SaveGame(storage);
+    expect(reopened.dayTime).toEqual({ phase: 'evening', elapsed: 42.5 });
+    expect(reopened.lifeEnergy).toBe(10);
+  });
+
+  test('a damaged time of day starts again at the beginning of the morning', () => {
+    for (const damaged of ['{"dayPhase":"teatime","phaseElapsed":5}', '{"dayPhase":"night","phaseElapsed":-1}']) {
+      expect(new SaveGame(fakeStorage(damaged)).dayTime).toEqual({ phase: 'morning', elapsed: 0 });
+    }
+  });
+
+  test("saving the time of day, which happens all the time, doesn't disturb anything listening for changes", () => {
+    const save = new SaveGame(fakeStorage());
+    let heard = 0;
+    save.onChange(() => heard++);
+    save.setDayTime('afternoon', 3);
+    expect(heard).toBe(0);
+  });
+
   test('the game hears about each change, until it stops listening', () => {
     const save = new SaveGame(fakeStorage());
     let heard = 0;
