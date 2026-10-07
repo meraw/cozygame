@@ -163,6 +163,36 @@ export class Phone {
   }
 }
 
+// A burst of life energy at `point`, as something drained comes back to life: a ring of light
+// spreading out, and glowing orbs flying off in every direction.
+export function burstOfLife(scene, point) {
+  makeTextures(scene);
+  const ring = scene.add.circle(point.x, point.y, 60).setStrokeStyle(14, COLORS.energy, 0.9).setDepth(EFFECTS_DEPTH);
+  scene.tweens.add({
+    targets: ring,
+    scale: 3.4,
+    alpha: 0,
+    duration: 750,
+    ease: 'Cubic.easeOut',
+    onComplete: () => ring.destroy(),
+  });
+  const orbs = 18;
+  for (let i = 0; i < orbs; i++) {
+    const angle = (i / orbs) * Math.PI * 2;
+    const orb = scene.add.image(point.x, point.y, 'life-orb').setScale(0.6).setDepth(EFFECTS_DEPTH);
+    scene.tweens.add({
+      targets: orb,
+      x: point.x + Math.cos(angle) * 210,
+      y: point.y + Math.sin(angle) * 150,
+      scale: 1.1,
+      duration: 950,
+      ease: 'Cubic.easeOut',
+      onComplete: () => orb.destroy(),
+    });
+    scene.tweens.add({ targets: orb, alpha: 0, delay: 500, duration: 450 });
+  }
+}
+
 function makeTextures(scene) {
   if (!scene.textures.exists('life-orb')) {
     const g = scene.make.graphics({}, false);

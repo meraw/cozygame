@@ -1,13 +1,14 @@
 import Phaser from 'phaser';
 import { save } from '../save.js';
 import { addSunsetLight, drawVillage } from '../village/drawVillage.js';
-import { buildWalkGrid, village, villageDoors } from '../village/layout.js';
+import { buildWalkGrid, restorableAt, village, villageDoors } from '../village/layout.js';
 import { Villager } from '../village/villager.js';
 import { characters } from '../world/characters.js';
 import { isOnCharacter } from '../world/harvest.js';
 import { addBuildLabel } from './buildLabel.js';
 import { fadeIn, listenForTaps } from './doorTaps.js';
-import { Phone } from './phone.js';
+import { burstOfLife, Phone } from './phone.js';
+import { Toast } from './toast.js';
 import { Walker } from './walker.js';
 
 const MARKER_COLOR = 0xfff0c8;
@@ -23,7 +24,8 @@ export class VillageScene extends Phaser.Scene {
     const doors = villageDoors(village);
     this.restorables = drawVillage(this, village);
     this.showLooks();
-    // A drained thing changes look as soon as the save changes (for now, from the ?debug switches)
+    // A drained thing changes look as soon as the save changes: restored by a tap, or by the
+    // ?debug switches
     const stopWatching = save.onChange(() => this.showLooks());
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, stopWatching);
     addSunsetLight(this);
@@ -47,13 +49,24 @@ export class VillageScene extends Phaser.Scene {
         flinch() {},
       },
     ]);
+    this.toast = new Toast(this);
     listenForTaps(
       this,
       this.walker,
       doors,
       (building) => this.scene.start('House', { building, interior: doors[building].interior }),
-      (tapped, pointer) => this.phone.tap(tapped, pointer),
+      (tapped, pointer) => this.phone.tap(tapped, pointer) || this.tapDrained(tapped),
     );
+  }
+
+  // A tap on something drained restores it, if Meredith has the life energy it takes; if not,
+  // a short message says so. Returns true if the tap was on something drained.
+  tapDrained(tapped) {
+    const thing = restorableAt(village, tapped);
+    if (!thing || save.isRestored(thing.name)) return false;
+    if (save.restore(thing.name, thing.cost)) burstOfLife(this, thing.middle);
+    else this.toast.show(`Not enough life energy: restoring this takes ${thing.cost}.`);
+    return true;
   }
 
   // Shows each drained thing the way the save has it: restored, or still decayed.

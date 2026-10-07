@@ -18,11 +18,12 @@ const ROAD_HALF_WIDTH = 80;
 const ROAD_TOP = ROAD_Y - ROAD_HALF_WIDTH;
 
 // Things marked `restorable` have had their life drained by the vampires: the game starts with
-// them decayed until the player restores them. The name is what the save remembers them by.
+// them decayed until the player restores them. The name is what the save remembers them by,
+// and `cost` is how much life energy restoring them takes.
 
 const houses = [
   // Along the road, doors facing it. The first is the student house Meredith shares with Nora.
-  { x: 600, baseY: 1640, width: 300, wall: 200, restorable: 'student-house', interior: 'student' },
+  { x: 600, baseY: 1640, width: 300, wall: 200, restorable: 'student-house', cost: 30, interior: 'student' },
   { x: 1350, baseY: 1600, width: 320, wall: 210 },
   { x: 2100, baseY: 1640, width: 280, wall: 190 },
   { x: 3900, baseY: 1620, width: 300, wall: 200 },
@@ -59,6 +60,7 @@ export const village = {
     radius: 240,
     sign: { text: 'LEIRA', letterWidth: 64, letterHeight: 92, gap: 10, baseline: 125 },
     restorable: 'roundabout',
+    cost: 40,
   },
   pond: { x: 4800, y: 2700, radiusX: 520, radiusY: 230 },
   houses,
@@ -74,7 +76,7 @@ export const village = {
     { x: 2560, y: 2800, width: 1080, height: 80 }, // past the lower houses' doors
   ],
   fields: [
-    { x: 400, y: 2260, width: 700, height: 440, restorable: 'west-field' },
+    { x: 400, y: 2260, width: 700, height: 440, restorable: 'west-field', cost: 20 },
     { x: 1250, y: 2260, width: 690, height: 440 },
   ],
   // Fences around the fields, with a gate gap at the top
@@ -87,7 +89,7 @@ export const village = {
   ],
   trees: [...edgeTrees(), ...villageTrees()],
   benches: [
-    { x: 2640, y: 2150, restorable: 'square-bench' },
+    { x: 2640, y: 2150, restorable: 'square-bench', cost: 10 },
     { x: 4800, y: 2390 },
   ],
   lamps: [
@@ -106,11 +108,49 @@ export const village = {
   ],
 };
 
+// Everything in the village that has been drained of life: its name, how much life energy
+// restoring it takes, its middle, and whether a tap at a point lands on it.
+export function restorables(v = village) {
+  const things = [];
+  const add = (thing, middle, isTappedAt) =>
+    things.push({ name: thing.restorable, cost: thing.cost, middle, isTappedAt });
+  const doors = houseDoors(v.houses);
+  v.houses.forEach((house, i) => {
+    if (!house.restorable) return;
+    const { left, top, width, height } = houseBounds(house);
+    const door = doors[i].area;
+    // The house, but not its door, which is for going in
+    add(
+      house,
+      { x: house.x, y: top + height / 2 },
+      (p) => inRect(p, left, top, width, height) && !inRect(p, door.left, door.top, door.right - door.left, door.bottom - door.top),
+    );
+  });
+  for (const bench of v.benches) {
+    if (bench.restorable) add(bench, { x: bench.x, y: bench.y - 50 }, (p) => inRect(p, bench.x - 90, bench.y - 100, 180, 112));
+  }
+  for (const field of v.fields) {
+    const middle = { x: field.x + field.width / 2, y: field.y + field.height / 2 };
+    if (field.restorable) add(field, middle, (p) => inRect(p, field.x, field.y, field.width, field.height));
+  }
+  // The roundabout, and its hedges standing up out of it
+  const { roundabout: r } = v;
+  if (r.restorable) add(r, { x: r.x, y: r.y - 30 }, (p) => Math.hypot(p.x - r.x, p.y - (r.y - 30)) <= r.radius + 20);
+  return things;
+}
+
+// The drained thing a tap lands on, if any.
+export function restorableAt(v, point) {
+  return restorables(v).find((thing) => thing.isTappedAt(point)) ?? null;
+}
+
 // The names of everything in the village that has been drained of life.
 export function restorableNames(v = village) {
-  return [...v.houses, ...v.benches, ...v.fields, v.roundabout]
-    .filter((thing) => thing.restorable)
-    .map((thing) => thing.restorable);
+  return restorables(v).map((thing) => thing.name);
+}
+
+function inRect(point, left, top, width, height) {
+  return point.x >= left && point.x <= left + width && point.y >= top && point.y <= top + height;
 }
 
 // The area a house covers on screen, from the bottom of its wall to the top of its roof.

@@ -7,6 +7,7 @@ import { afterAll, beforeAll, expect, test } from 'vitest';
 import mayorFile from '../dialogue/mayor.txt?raw';
 import { office } from '../src/house/office.js';
 import { roomDoor } from '../src/house/room.js';
+import { SAVE_KEY } from '../src/save.js';
 import { studentRoom } from '../src/house/studentRoom.js';
 import { houseDoors, restorableNames, village, villageDoors } from '../src/village/layout.js';
 import { parseDialogue } from '../src/world/conversation.js';
@@ -48,6 +49,23 @@ async function openGame(viewport) {
 
 function waitForVillage(page) {
   return page.waitForFunction(() => window.cozy?.game.scene.isActive('Village'), null, { timeout: 15_000 });
+}
+
+// Opens the game with something already in the save, as if it had been played before.
+async function openGameWithSave(viewport, saved) {
+  const page = await openGame(viewport);
+  await page.evaluate(([key, data]) => localStorage.setItem(key, JSON.stringify(data)), [SAVE_KEY, saved]);
+  await page.reload();
+  await waitForVillage(page);
+  return page;
+}
+
+// The short message showing in the village right now, if any.
+function messageShown(page) {
+  return page.evaluate(() => {
+    const { toast } = window.cozy.game.scene.getScene('Village');
+    return toast.container.visible ? toast.message.text : '';
+  });
 }
 
 // The game is entirely on screen, and as big as the screen allows (filling its width or its height).
@@ -204,6 +222,31 @@ test('the drained things start decayed, and one restored stays restored after re
   await page.reload();
   await waitForVillage(page);
   expect(await looks(page)).toEqual(houseRestored);
+}, 60_000);
+
+test('with enough life energy, tapping the drained house restores it and spends the energy, still so after reloading', async () => {
+  const house = village.houses[0];
+  const page = await openGameWithSave(SIDEWAYS, { restored: [], lifeEnergy: 50 });
+  const left = 50 - house.cost;
+
+  await tap(page, 'Village', { x: house.x + 100, y: house.baseY - 60 });
+  await expect.poll(() => looks(page)).toMatchObject({ 'student-house': 'restored' });
+  expect(await counterShows(page, 'Village')).toBe(left);
+
+  await page.reload();
+  await waitForVillage(page);
+  expect(await looks(page)).toMatchObject({ 'student-house': 'restored' });
+  expect(await counterShows(page, 'Village')).toBe(left);
+}, 60_000);
+
+test('without enough life energy, tapping a drained thing only shows a short message saying so', async () => {
+  const house = village.houses[0];
+  const page = await openGame(SIDEWAYS);
+
+  await tap(page, 'Village', { x: house.x + 100, y: house.baseY - 60 });
+  await expect.poll(() => messageShown(page)).toMatch(/not enough life energy/i);
+  expect(await looks(page)).toMatchObject({ 'student-house': 'decayed' });
+  expect(await counterShows(page, 'Village')).toBe(0);
 }, 60_000);
 
 test("double-tapping the door you stand at takes you into Nora and Meredith's house, and back out the same way", async () => {

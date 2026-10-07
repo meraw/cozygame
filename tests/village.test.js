@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { buildWalkGrid, restorableNames, village, villageDoors } from '../src/village/layout.js';
+import { buildWalkGrid, restorableAt, restorableNames, restorables, village, villageDoors } from '../src/village/layout.js';
 import { isWalkable, toCell } from '../src/world/grid.js';
 import { planPath } from '../src/world/pathfinding.js';
 
@@ -53,6 +53,30 @@ describe('the village', () => {
 
   test("Nora and Meredith's house, one bench, one field and the roundabout have been drained of life, each saved by its own name", () => {
     expect(restorableNames(village)).toEqual(['student-house', 'square-bench', 'west-field', 'roundabout']);
+  });
+});
+
+describe('tapping the drained things', () => {
+  const house = village.houses[0];
+
+  test('each takes some life energy to restore', () => {
+    for (const thing of restorables(village)) expect(thing.cost).toBeGreaterThan(0);
+  });
+
+  test("a tap on Nora and Meredith's house finds it, but not a tap on its door, which is for going in", () => {
+    expect(restorableAt(village, { x: house.x + 100, y: house.baseY - 60 })?.name).toBe('student-house');
+    expect(restorableAt(village, { x: house.x, y: house.baseY - 230 })?.name).toBe('student-house');
+    expect(restorableAt(village, { x: house.x, y: house.baseY - 56 })).toBeNull();
+  });
+
+  test('taps on the bench, the field and the roundabout find them, and a tap on the road finds nothing', () => {
+    const bench = village.benches.find((spot) => spot.restorable);
+    const field = village.fields.find((spot) => spot.restorable);
+    const { roundabout } = village;
+    expect(restorableAt(village, { x: bench.x, y: bench.y - 40 })?.name).toBe('square-bench');
+    expect(restorableAt(village, { x: field.x + 100, y: field.y + 100 })?.name).toBe('west-field');
+    expect(restorableAt(village, { x: roundabout.x, y: roundabout.y + 100 })?.name).toBe('roundabout');
+    expect(restorableAt(village, { x: 1500, y: village.road.y })).toBeNull();
   });
 });
 

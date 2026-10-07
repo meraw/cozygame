@@ -80,6 +80,33 @@ describe('the save', () => {
     }
   });
 
+  test('restoring something spends life energy, and both are remembered', () => {
+    const storage = fakeStorage();
+    const save = new SaveGame(storage);
+    save.addLifeEnergy(50);
+    expect(save.restore('student-house', 30)).toBe(true);
+    const reopened = new SaveGame(storage);
+    expect(reopened.isRestored('student-house')).toBe(true);
+    expect(reopened.lifeEnergy).toBe(20);
+  });
+
+  test('without enough life energy, nothing is restored and nothing is spent', () => {
+    const storage = fakeStorage();
+    const save = new SaveGame(storage);
+    save.addLifeEnergy(20);
+    expect(save.restore('student-house', 30)).toBe(false);
+    expect(save.isRestored('student-house')).toBe(false);
+    expect(save.lifeEnergy).toBe(20);
+    expect(new SaveGame(storage).isRestored('student-house')).toBe(false);
+  });
+
+  test('exactly enough life energy is enough', () => {
+    const save = new SaveGame(fakeStorage());
+    save.addLifeEnergy(30);
+    expect(save.restore('student-house', 30)).toBe(true);
+    expect(save.lifeEnergy).toBe(0);
+  });
+
   test('the game hears about each change, until it stops listening', () => {
     const save = new SaveGame(fakeStorage());
     let heard = 0;

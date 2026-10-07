@@ -30,6 +30,16 @@ export class SaveGame {
     this.changed();
   }
 
+  // Spends `cost` life energy to restore something drained, both saved together. Returns
+  // whether it worked: without enough life energy, nothing changes.
+  restore(name, cost) {
+    if (this.lifeEnergy < cost) return false;
+    this.lifeEnergy -= cost;
+    this.restored.add(name);
+    this.changed();
+    return true;
+  }
+
   // Calls listener after every change. Returns a function that stops it.
   onChange(listener) {
     this.listeners.add(listener);
