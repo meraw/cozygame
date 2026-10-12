@@ -11,6 +11,12 @@ night minutes: 5
 # How many seconds the light takes to change from one part of the day to the next
 fade seconds: 20
 
+# The crowd strolling about the village: how many people, how many of them are vampires in
+# disguise, and how much life energy each vampire gives when harvested (once a day each)
+people in the village: 7
+vampires among them: 3
+life energy per vampire: 10
+
 # Music for each part of the day: the name of a file you've put in the public/music folder,
 # like  morning music: birds.mp3  Leave it empty for silence.
 morning music:

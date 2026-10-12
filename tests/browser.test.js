@@ -13,8 +13,11 @@ import { studentRoom } from '../src/house/studentRoom.js';
 import { houseDoors, restorableNames, village, villageDoors } from '../src/village/layout.js';
 import { parseDialogue } from '../src/world/conversation.js';
 import { isNearDoor } from '../src/world/doors.js';
-import { HARVEST_REACH, LIFE_ENERGY_PER_HARVEST } from '../src/world/harvest.js';
+import { HARVEST_REACH } from '../src/world/harvest.js';
 import { parseSettings } from '../src/world/settings.js';
+
+// The life energy each vampire gives, as settings.txt has it
+const LIFE_ENERGY_PER_HARVEST = parseSettings(settingsFile).crowd.energy;
 
 // These tests play the real game in Chrome, pretending to be an Android tablet with a touch screen.
 // An Android tablet's screen, held upright and sideways (sideways loses some height to the browser bar).
@@ -177,12 +180,38 @@ async function tapPhoneButton(page, sceneKey) {
   await page.touchscreen.tap(x, y);
 }
 
-// Where the villager walking around the village is right now (the point under their feet).
-function villagerInVillage(page) {
-  return page.evaluate(() => {
-    const { player } = window.cozy.game.scene.getScene('Village').villager.walker;
-    return { x: player.x, y: player.y };
-  });
+// Who's strolling about the village right now: each one's id, whether they're a vampire, and
+// where they stand (the point under their feet).
+function crowdInVillage(page) {
+  return page.evaluate(() =>
+    window.cozy.game.scene.getScene('Village').crowd.map(({ person, walker }) => ({
+      id: person.id,
+      isVampire: person.isVampire,
+      x: walker.player.x,
+      y: walker.player.y,
+    })),
+  );
+}
+
+async function someoneInVillage(page, id) {
+  return (await crowdInVillage(page)).find((person) => person.id === id);
+}
+
+// Walks Meredith up to someone in the crowd (who stops strolling while she's close), and
+// returns where they both stand.
+async function walkUpTo(page, id) {
+  let person;
+  let meredith;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    person = await someoneInVillage(page, id);
+    await tap(page, 'Village', { x: person.x - 120, y: person.y + 30 });
+    await waitUntilStill(page, 'Village');
+    person = await someoneInVillage(page, id);
+    meredith = await playerInVillage(page);
+    if (Math.hypot(person.x - meredith.x, person.y - meredith.y) < HARVEST_REACH - 40) break;
+  }
+  expect(Math.hypot(person.x - meredith.x, person.y - meredith.y)).toBeLessThan(HARVEST_REACH);
+  return { person, meredith };
 }
 
 // Without a graphics card the game runs in slow motion, so allow plenty of time for walks and fades.
@@ -342,34 +371,65 @@ test('harvesting Nora with the phone raises the life energy counter, which is st
   await tap(page, 'House', onNora);
   await expect.poll(() => counterShows(page, 'House'), SLOW).toBe(LIFE_ENERGY_PER_HARVEST);
 
+  // Once a day: tapping her again gets nothing more
+  await page.waitForTimeout(1500);
+  await tapPhoneButton(page, 'House');
+  await tap(page, 'House', onNora);
+  await page.waitForTimeout(1500);
+  expect(await counterShows(page, 'House')).toBe(LIFE_ENERGY_PER_HARVEST);
+
   // Reopening the game: still there
   await page.reload();
   await waitForVillage(page);
   expect(await counterShows(page, 'Village')).toBe(LIFE_ENERGY_PER_HARVEST);
 }, 120_000);
 
-test("tapping someone who isn't a vampire with the phone out does nothing", async () => {
+test("tapping someone who isn't a vampire is a mistake: no life energy, and the phone needs a rest", async () => {
   const page = await openGame(SIDEWAYS);
+  const human = (await crowdInVillage(page)).find((person) => !person.isVampire);
+  const { person, meredith } = await walkUpTo(page, human.id);
 
-  // Walk up to the villager (who stops walking about while Meredith is close)
-  let villager;
-  let meredith;
-  for (let attempt = 0; attempt < 4; attempt++) {
-    villager = await villagerInVillage(page);
-    await tap(page, 'Village', { x: villager.x - 120, y: villager.y + 30 });
-    await waitUntilStill(page, 'Village');
-    villager = await villagerInVillage(page);
-    meredith = await playerInVillage(page);
-    if (Math.hypot(villager.x - meredith.x, villager.y - meredith.y) < HARVEST_REACH - 40) break;
-  }
-  expect(Math.hypot(villager.x - meredith.x, villager.y - meredith.y)).toBeLessThan(HARVEST_REACH);
-
-  // Phone out, tap the villager: no life energy, and Meredith doesn't go anywhere either
+  // Phone out, tap them: no life energy, Meredith doesn't go anywhere, and a message says so
   await tapPhoneButton(page, 'Village');
-  await tap(page, 'Village', { x: villager.x, y: villager.y - 100 });
-  await page.waitForTimeout(1500);
+  await tap(page, 'Village', { x: person.x, y: person.y - 100 });
+  await expect.poll(() => messageShown(page), SLOW).toContain('Not a vampire');
   expect(await counterShows(page, 'Village')).toBe(0);
   expect(await playerInVillage(page)).toEqual(meredith);
+
+  // The phone went away, and won't come out again for a moment
+  const phoneIsOut = () => page.evaluate(() => window.cozy.game.scene.getScene('Village').phone.isOut);
+  expect(await phoneIsOut()).toBe(false);
+  await tapPhoneButton(page, 'Village');
+  expect(await phoneIsOut()).toBe(false);
+  await expect.poll(() => messageShown(page), SLOW).toContain('recovering');
+}, 120_000);
+
+test('harvesting a vampire in the crowd sends them home for the day; the next morning they are all back', async () => {
+  const page = await openGame(SIDEWAYS);
+  const crowd = await crowdInVillage(page);
+  const { people, vampires } = parseSettings(settingsFile).crowd;
+  expect(crowd).toHaveLength(people);
+  expect(crowd.filter((person) => person.isVampire)).toHaveLength(vampires);
+
+  // Walk up to the vampire nearest the start, phone out, and tap them
+  const vampire = crowd.filter((person) => person.isVampire).sort((a, b) => a.x - b.x)[0];
+  const { person } = await walkUpTo(page, vampire.id);
+  await tapPhoneButton(page, 'Village');
+  await tap(page, 'Village', { x: person.x, y: person.y - 100 });
+  await expect.poll(() => counterShows(page, 'Village'), SLOW).toBe(LIFE_ENERGY_PER_HARVEST);
+
+  // They hurry off home, and stay there, even after reopening the game
+  await expect.poll(async () => (await someoneInVillage(page, vampire.id)) === undefined, SLOW).toBe(true);
+  await page.reload();
+  await waitForVillage(page);
+  expect(await someoneInVillage(page, vampire.id)).toBeUndefined();
+  expect(await crowdInVillage(page)).toHaveLength(people - 1);
+
+  // Skip on to the next morning: a new day, a new crowd, everyone out again
+  const skipDay = page.getByRole('button', { name: /^day:/ });
+  for (let i = 0; i < 4; i++) await skipDay.click();
+  await expect.poll(async () => (await crowdInVillage(page)).length, SLOW).toBe(people);
+  expect(await counterShows(page, 'Village')).toBe(LIFE_ENERGY_PER_HARVEST);
 }, 120_000);
 
 test("the town hall's door leads into the mayor's office, where you can talk to the Mayor", async () => {

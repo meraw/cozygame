@@ -5,13 +5,12 @@ import { HARVEST_REACH, isOnCharacter, phoneTapOn } from '../src/world/harvest.j
 describe("Meredith's phone", () => {
   const spot = { x: 1500, y: 900 };
   const nora = { ...characters.nora, ...spot };
-  const villager = { ...characters.villager, ...spot };
+  const villager = { isVampire: false, ...spot };
   const closeBy = { x: spot.x - 150, y: spot.y + 60 };
   const farAway = { x: spot.x - HARVEST_REACH - 100, y: spot.y };
 
-  test('Nora is a vampire; the villager and the Mayor are not', () => {
+  test('Nora is a vampire; the Mayor is not', () => {
     expect(characters.nora.isVampire).toBe(true);
-    expect(characters.villager.isVampire).toBe(false);
     expect(characters.mayor.isVampire).toBe(false);
   });
 
@@ -19,13 +18,17 @@ describe("Meredith's phone", () => {
     expect(phoneTapOn(nora, closeBy)).toBe('harvest');
   });
 
-  test('walks up to a vampire who is too far away, instead of harvesting', () => {
+  test('walks up to anyone who is too far away, vampire or not, so the phone gives nothing away from afar', () => {
     expect(phoneTapOn(nora, farAway)).toBe('walk');
+    expect(phoneTapOn(villager, farAway)).toBe('walk');
   });
 
-  test("does nothing at all to someone who isn't a vampire, however close", () => {
-    expect(phoneTapOn(villager, closeBy)).toBe('nothing');
-    expect(phoneTapOn(villager, farAway)).toBe('nothing');
+  test("close by, someone who isn't a vampire is a mistake", () => {
+    expect(phoneTapOn(villager, closeBy)).toBe('mistake');
+  });
+
+  test('a vampire already harvested today has nothing left to give', () => {
+    expect(phoneTapOn({ ...nora, drained: true }, closeBy)).toBe('drained');
   });
 
   test('a tap anywhere on someone counts, but not one beside or above them', () => {

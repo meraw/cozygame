@@ -1,10 +1,14 @@
 import Phaser from 'phaser';
+import { settings } from '../clock.js';
 import { save } from '../save.js';
-import { LIFE_ENERGY_PER_HARVEST, phoneTapOn } from '../world/harvest.js';
+import { phoneTapOn } from '../world/harvest.js';
+import { Toast } from './toast.js';
 
 // Meredith's bright orange phone, from the Mayor (design.md). The button in the corner takes
 // it out (and puts it away again); with it out, tapping a vampire close by harvests their life
-// energy, which the counter at the top keeps (in the save). Sizes are in game units.
+// energy, which the counter at the top keeps (in the save). Each vampire has life energy to give
+// once a day. Tapping someone who isn't a vampire is a mistake: the phone needs a few seconds'
+// rest before it can come out again. Sizes are in game units.
 
 const FONT = 'ui-rounded, "Segoe UI", system-ui, sans-serif';
 const COLORS = {
@@ -30,15 +34,21 @@ const IN_HAND = { x: 42, y: -80 };
 // How far to the side of a vampire Meredith goes to stand, when she has to walk up to them
 const SIDE_BY_SIDE = 110;
 const ORBS = 8;
+// How long the phone rests after a mistake, in milliseconds
+export const REST_MS = 5000;
 
 export class Phone {
-  // walker: Meredith. people: who's in this scene, each with
-  //   isVampire, feet() (where they stand now), isTappedAt(point), flinch()
+  // walker: Meredith. people: who's in this scene (a list, or a function giving it), each with
+  //   id (for the save), name (for messages, if they have one), isVampire,
+  //   feet() (where they stand now), isTappedAt(point), flinch(),
+  //   and optionally harvested() (after giving their life energy) and offended() (after a mistake)
   constructor(scene, walker, people) {
     this.scene = scene;
     this.walker = walker;
-    this.people = people;
+    this.people = typeof people === 'function' ? people : () => people;
     this.isOut = false;
+    this.isResting = false;
+    this.toast = new Toast(scene);
     makeTextures(scene);
 
     this.ring = scene.add.circle(0, 0, BUTTON.radius + 14).setStrokeStyle(12, COLORS.phone).setVisible(false);
@@ -88,24 +98,46 @@ export class Phone {
   // Returns true if the phone used the tap up.
   tap(tapped, pointer) {
     if (Math.hypot(pointer.x - BUTTON.x, pointer.y - BUTTON.y) <= BUTTON.radius) {
-      this.setOut(!this.isOut);
+      if (this.isResting) this.toast.show('The phone is still recovering. Just a moment!');
+      else this.setOut(!this.isOut);
       return true;
     }
     if (!this.isOut) return false;
-    const person = this.people.find((someone) => someone.isTappedAt(tapped));
+    // The one in front, if people stand one behind the other
+    const person = this.people()
+      .filter((someone) => someone.isTappedAt(tapped))
+      .sort((a, b) => b.feet().y - a.feet().y)[0];
     if (!person) return false;
     const feet = person.feet();
     const meredith = this.walker.player;
-    const result = phoneTapOn({ isVampire: person.isVampire, x: feet.x, y: feet.y }, meredith);
+    const drained = save.wasHarvested(person.id);
+    const result = phoneTapOn({ isVampire: person.isVampire, drained, x: feet.x, y: feet.y }, meredith);
     if (result === 'harvest') {
       this.harvest(person);
     } else if (result === 'walk') {
-      // Up to the vampire's side, the side she's coming from
+      // Up to their side, the side she's coming from
       const side = meredith.x < feet.x ? -1 : 1;
       this.walker.walkTo(feet.x + side * SIDE_BY_SIDE, feet.y);
+    } else if (result === 'drained') {
+      this.toast.show(`${person.name ?? 'This vampire'} has no life energy left today. Tomorrow!`);
+    } else {
+      this.mistake(person);
     }
-    // Someone who isn't a vampire: nothing happens at all
     return true;
+  }
+
+  // Not a vampire! They're offended, and the phone goes away to rest for a few seconds.
+  mistake(person) {
+    this.walker.stop();
+    person.offended?.();
+    this.setOut(false);
+    this.isResting = true;
+    this.button.setAlpha(0.4);
+    this.toast.show('Not a vampire! The phone needs a moment to recover.');
+    this.scene.time.delayedCall(REST_MS, () => {
+      this.isResting = false;
+      this.button.setAlpha(1);
+    });
   }
 
   setOut(out) {
@@ -126,8 +158,9 @@ export class Phone {
     this.walker.figure.setFlipX(facingLeft);
     this.inHand.setX(facingLeft ? -IN_HAND.x : IN_HAND.x).setVisible(true);
     const hand = { x: meredith.x + this.inHand.x, y: meredith.y + IN_HAND.y };
-    save.addLifeEnergy(LIFE_ENERGY_PER_HARVEST);
+    save.harvest(person.id, settings.crowd.energy);
     person.flinch();
+    person.harvested?.();
     for (let i = 0; i < ORBS; i++) {
       const angle = (i / ORBS) * Math.PI * 2;
       const orb = scene.add.image(from.x, from.y - 110, 'life-orb').setScale(0.3).setDepth(EFFECTS_DEPTH);

@@ -49,11 +49,12 @@ export class HouseScene extends Phaser.Scene {
     if (this.interior === 'office') {
       this.mayor = createMayor(this, office.mayor.x, office.mayor.y);
       this.dialogueBox = new DialogueBox(this);
-      people.push({ ...characters.mayor, feet: () => office.mayor, isTappedAt: isOnMayor, flinch() {} });
+      people.push({ id: 'mayor', ...characters.mayor, feet: () => office.mayor, isTappedAt: isOnMayor, flinch() {} });
     }
     if (this.interior === 'student') {
       const nora = createNora(this, studentRoom.nora);
       people.push({
+        id: 'nora',
         ...characters.nora,
         feet: () => studentRoom.nora,
         isTappedAt: (point) => isOnCharacter(studentRoom.nora, point),

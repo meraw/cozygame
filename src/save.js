@@ -1,7 +1,7 @@
 // The player's progress, kept in the browser's storage (localStorage) so it's still there the
 // next time the game opens on the same tablet: which drained things have been restored, how
-// much life energy Meredith has harvested, and the time of day. Everything else starts as in a
-// new game.
+// much life energy Meredith has harvested, the time of day, which day it is, and which
+// vampires she has already harvested today. Everything else starts as in a new game.
 
 import { PHASES } from './world/dayCycle.js';
 
@@ -17,6 +17,10 @@ export class SaveGame {
     this.lifeEnergy = saved.lifeEnergy;
     // The part of the day, and how many seconds into it
     this.dayTime = saved.dayTime;
+    // Day 1 is the first day of the game; a new one starts every morning
+    this.day = saved.day;
+    // Who has given their life energy today, by the names in characters.js and crowd.js
+    this.harvested = new Set(saved.harvested);
     this.listeners = new Set();
   }
 
@@ -45,10 +49,30 @@ export class SaveGame {
     return true;
   }
 
-  // Saves the time of day. It's saved every few seconds, so nothing listening is told.
+  wasHarvested(who) {
+    return this.harvested.has(who);
+  }
+
+  // A vampire gives `amount` life energy, and has none left until tomorrow.
+  harvest(who, amount) {
+    this.lifeEnergy += amount;
+    this.harvested.add(who);
+    this.changed();
+  }
+
+  // Saves the time of day. It's saved every few seconds, so nothing listening is told, unless
+  // the night has just turned to morning: then a new day starts, and every vampire has life
+  // energy to give again.
   setDayTime(phase, elapsed) {
+    const newDay = phase === 'morning' && this.dayTime.phase !== 'morning';
     this.dayTime = { phase, elapsed };
-    this.write();
+    if (newDay) {
+      this.day += 1;
+      this.harvested.clear();
+      this.changed();
+    } else {
+      this.write();
+    }
   }
 
   // Calls listener after every change. Returns a function that stops it.
@@ -63,8 +87,15 @@ export class SaveGame {
   }
 
   write() {
-    const { restored, lifeEnergy, dayTime } = this;
-    const data = { restored: [...restored], lifeEnergy, dayPhase: dayTime.phase, phaseElapsed: dayTime.elapsed };
+    const { restored, lifeEnergy, dayTime, day, harvested } = this;
+    const data = {
+      restored: [...restored],
+      lifeEnergy,
+      dayPhase: dayTime.phase,
+      phaseElapsed: dayTime.elapsed,
+      day,
+      harvested: [...harvested],
+    };
     try {
       this.storage?.setItem(SAVE_KEY, JSON.stringify(data));
     } catch {
@@ -81,14 +112,15 @@ function readSave(storage) {
   } catch {
     // Unreadable: a new game
   }
-  const restored = Array.isArray(saved?.restored) ? saved.restored.filter((name) => typeof name === 'string') : [];
+  const names = (list) => (Array.isArray(list) ? list.filter((name) => typeof name === 'string') : []);
   const energy = saved?.lifeEnergy;
   const lifeEnergy = Number.isFinite(energy) && energy >= 0 ? Math.floor(energy) : 0;
   const phase = saved?.dayPhase;
   const elapsed = saved?.phaseElapsed;
   const dayTime =
     PHASES.includes(phase) && Number.isFinite(elapsed) && elapsed >= 0 ? { phase, elapsed } : { phase: 'morning', elapsed: 0 };
-  return { restored, lifeEnergy, dayTime };
+  const day = Number.isInteger(saved?.day) && saved.day >= 1 ? saved.day : 1;
+  return { restored: names(saved?.restored), lifeEnergy, dayTime, day, harvested: names(saved?.harvested) };
 }
 
 function browserStorage() {

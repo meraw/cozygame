@@ -28,4 +28,15 @@ describe('reading the settings file', () => {
     for (const phase of ['morning', 'afternoon', 'evening', 'night']) expect(day[phase]).toBeGreaterThan(0);
     expect(day.fade).toBeGreaterThan(0);
   });
+
+  test('how many people stroll about, how many of them are vampires, and the life energy each vampire gives', () => {
+    const { crowd } = parseSettings('people in the village: 9\nvampires among them: 4\nlife energy per vampire: 15');
+    expect(crowd).toEqual({ people: 9, vampires: 4, energy: 15 });
+  });
+
+  test('none at all is fine for people and vampires; anything broken falls back to 7, 3 and 10', () => {
+    expect(parseSettings('people in the village: 0\nvampires among them: 0').crowd).toEqual({ people: 0, vampires: 0, energy: 10 });
+    const broken = 'people in the village: lots\nvampires among them: -1\nlife energy per vampire: 0';
+    expect(parseSettings(broken).crowd).toEqual({ people: 7, vampires: 3, energy: 10 });
+  });
 });

@@ -144,4 +144,57 @@ describe('the save', () => {
     save.setRestored('student-house', false);
     expect(heard).toBe(1);
   });
+
+  test('a new game starts on day 1, with nobody harvested yet', () => {
+    const save = new SaveGame(fakeStorage());
+    expect(save.day).toBe(1);
+    expect(save.wasHarvested('nora')).toBe(false);
+  });
+
+  test('harvesting a vampire adds their life energy and remembers them, the next time the game opens too', () => {
+    const storage = fakeStorage();
+    new SaveGame(storage).harvest('nora', 10);
+    const reopened = new SaveGame(storage);
+    expect(reopened.lifeEnergy).toBe(10);
+    expect(reopened.wasHarvested('nora')).toBe(true);
+    expect(reopened.wasHarvested('crowd-2')).toBe(false);
+  });
+
+  test('when the night turns to morning a new day starts, and every vampire can be harvested again', () => {
+    const storage = fakeStorage();
+    const save = new SaveGame(storage);
+    save.harvest('nora', 10);
+    save.setDayTime('evening', 0);
+    save.setDayTime('night', 0);
+    expect(save.wasHarvested('nora')).toBe(true);
+    save.setDayTime('morning', 0);
+    expect(save.day).toBe(2);
+    expect(save.wasHarvested('nora')).toBe(false);
+    expect(save.lifeEnergy).toBe(10);
+    expect(new SaveGame(storage).day).toBe(2);
+  });
+
+  test('saving the time partway through the morning is not a new day', () => {
+    const save = new SaveGame(fakeStorage());
+    save.setDayTime('morning', 30);
+    save.setDayTime('morning', 35);
+    expect(save.day).toBe(1);
+  });
+
+  test('the game hears about a new day starting', () => {
+    const save = new SaveGame(fakeStorage());
+    save.setDayTime('night', 0);
+    let heard = 0;
+    save.onChange(() => heard++);
+    save.setDayTime('morning', 0);
+    expect(heard).toBe(1);
+  });
+
+  test('a damaged day or list of harvested vampires starts again from day 1, nobody harvested', () => {
+    for (const damaged of ['{"day":0}', '{"day":"two","harvested":"nora"}', '{"day":2.5,"harvested":[3]}']) {
+      const save = new SaveGame(fakeStorage(damaged));
+      expect(save.day).toBe(1);
+      expect(save.wasHarvested('nora')).toBe(false);
+    }
+  });
 });
